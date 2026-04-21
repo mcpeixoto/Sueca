@@ -1,0 +1,391 @@
+// ============================================================
+// SETUP & ADMIN UI
+// - SetupScreen: first-run wizard
+// - AdminPanel: slide-over for mid-tournament edits & score entry
+// ============================================================
+
+function SetupScreen({ state, setState, onStart }) {
+  const [name, setName] = React.useState(state.setup.name);
+  const [edition, setEdition] = React.useState(state.setup.edition);
+  const [format, setFormat] = React.useState(state.setup.format);
+  const [teamCount, setTeamCount] = React.useState(state.setup.teamCount || 8);
+  const [groupsOf, setGroupsOf] = React.useState(state.setup.groupsOf || 4);
+  const [pointsToWin, setPointsToWin] = React.useState(state.setup.pointsToWin || 10);
+  const [liveScore, setLiveScore] = React.useState(state.setup.liveScore);
+  const [qrUrl, setQrUrl] = React.useState(state.setup.qrUrl || "");
+
+  const [teams, setTeams] = React.useState(() => {
+    const n = state.setup.teamCount || 8;
+    return Array.from({length: n}, (_, i) => ({
+      name: state.teams[i]?.name || "",
+      p1: state.teams[i]?.p1 || "",
+      p2: state.teams[i]?.p2 || "",
+    }));
+  });
+
+  React.useEffect(() => {
+    setTeams(prev => {
+      const next = Array.from({length: teamCount}, (_, i) =>
+        prev[i] || { name: "", p1: "", p2: "" });
+      return next;
+    });
+  }, [teamCount]);
+
+  function updateTeam(i, field, val) {
+    setTeams(prev => prev.map((t, idx) => idx === i ? {...t, [field]: val} : t));
+  }
+
+  function start() {
+    const filled = teams.filter(t => t.name.trim() !== "");
+    if (filled.length < 2) { alert("Precisas de pelo menos 2 equipas."); return; }
+    const next = window.SuecaEngine.clone(state);
+    next.setup = { name, edition, format, teamCount: filled.length, pointsToWin, liveScore, groupsOf, qrUrl };
+    next.teams = filled.map(t => window.SuecaEngine.makeTeam(t.name, t.p1, t.p2));
+    next.matches = []; next.rounds = []; next.history = []; next.mvpVotes = {};
+    const started = window.SuecaEngine.startTournament(next);
+    setState(started);
+    window.SuecaEngine.saveState(started);
+    onStart();
+  }
+
+  function fillExamples() {
+    const examples = [
+      ["Os Ases do Cais","Tó Zé","Manel"],
+      ["Reis da Taberna","Joaquim","Serafim"],
+      ["Damas de Copas","Maria","Lurdes"],
+      ["Valetes do Norte","Bruno","Rui"],
+      ["Naipes do Minho","Alberto","Henrique"],
+      ["Sete de Ouros","Fernando","Carlos"],
+      ["Manilha Velha","João","Artur"],
+      ["Trunfo de Espadas","Paulo","Miguel"],
+      ["Às de Copas","Elsa","Cátia"],
+      ["Rainhas do Douro","Isabel","Teresa"],
+      ["Coringas","Diogo","Tiago"],
+      ["Os Vazados","Nuno","Hugo"],
+      ["Três Setes","Ricardo","Pedro"],
+      ["Naipe Forte","Vitor","André"],
+      ["Copas Altas","Sandro","Filipe"],
+      ["S. Cibrão FC","Dário","Bernardo"],
+    ];
+    setTeams(Array.from({length: teamCount}, (_, i) => ({
+      name: examples[i]?.[0] || `Equipa ${i+1}`,
+      p1: examples[i]?.[1] || "",
+      p2: examples[i]?.[2] || "",
+    })));
+  }
+
+  return (
+    <div className="setup-wrap">
+      <div className="setup-grid">
+        <div className="setup-hero">
+          <div className="eyebrow">Comissão de Festas · S. Cibrão</div>
+          <h1 className="display">Torneio de <em>Sueca</em></h1>
+          <div className="deck">
+            {[0,1,2,3].map(i => (
+              <div key={i} className={`deck-card deck-card-${i}`}>
+                <Card suit={SUITS[i]} rank={["A","K","Q","J"][i]} size={110} />
+              </div>
+            ))}
+          </div>
+          <p className="lead">
+            Configura o torneio abaixo. Depois liga o projetor, carrega em <b>Começar</b>, e nunca mais te preocupas —
+            o ecrã roda sozinho entre o jogo atual, bracket, ranking e MVP.
+          </p>
+          <div className="corner-ornament">♠ ♥ ♦ ♣</div>
+        </div>
+
+        <div className="setup-form">
+          <section>
+            <h3>Identidade</h3>
+            <label>Nome do torneio
+              <input value={name} onChange={e=>setName(e.target.value)} />
+            </label>
+            <label>Edição
+              <input value={edition} onChange={e=>setEdition(e.target.value)} />
+            </label>
+          </section>
+
+          <section>
+            <h3>Formato</h3>
+            <div className="seg">
+              {[
+                ["knockout","Eliminatória"],
+                ["league","Liga"],
+                ["groups","Grupos + Final"],
+              ].map(([v,l]) => (
+                <button key={v}
+                  className={format===v?"on":""}
+                  onClick={()=>setFormat(v)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="row">
+              <label>Nº equipas
+                <input type="number" min="2" max="32" value={teamCount}
+                       onChange={e=>setTeamCount(Math.max(2, +e.target.value||2))}/>
+              </label>
+              <label>Pedras para ganhar jogo
+                <input type="number" min="1" max="20" value={pointsToWin}
+                       onChange={e=>setPointsToWin(+e.target.value||10)}/>
+              </label>
+              {format === "groups" && (
+                <label>Equipas / grupo
+                  <input type="number" min="3" max="6" value={groupsOf}
+                         onChange={e=>setGroupsOf(+e.target.value||4)}/>
+                </label>
+              )}
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={liveScore}
+                     onChange={e=>setLiveScore(e.target.checked)} />
+              Marcar pontos/vazas ao vivo durante o jogo
+            </label>
+            <label>URL / QR para espectadores <span className="hint">(opcional)</span>
+              <input value={qrUrl} onChange={e=>setQrUrl(e.target.value)} placeholder="https://..." />
+            </label>
+          </section>
+
+          <section>
+            <div className="section-head">
+              <h3>Equipas</h3>
+              <button className="ghost" onClick={fillExamples}>Exemplos</button>
+            </div>
+            <div className="teams-list">
+              {teams.map((t, i) => (
+                <div key={i} className="team-row">
+                  <div className="team-num">{String(i+1).padStart(2,"0")}</div>
+                  <input className="team-name" placeholder="Nome da equipa"
+                         value={t.name} onChange={e=>updateTeam(i,"name",e.target.value)} />
+                  <input placeholder="Jogador 1"
+                         value={t.p1} onChange={e=>updateTeam(i,"p1",e.target.value)} />
+                  <input placeholder="Jogador 2"
+                         value={t.p2} onChange={e=>updateTeam(i,"p2",e.target.value)} />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <div className="setup-actions">
+            <button className="primary big" onClick={start}>
+              Começar torneio →
+            </button>
+            <button className="ghost" onClick={()=>{
+              if (confirm("Apagar tudo e recomeçar?")) {
+                const fresh = window.SuecaEngine.resetState();
+                setState(fresh);
+              }
+            }}>Limpar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Admin Panel ----------------
+function AdminPanel({ state, setState, open, setOpen }) {
+  const [tab, setTab] = React.useState("live");
+
+  function update(mutator) {
+    const next = window.SuecaEngine.clone(state);
+    mutator(next);
+    setState(next);
+    window.SuecaEngine.saveState(next);
+  }
+
+  function exportData() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `sueca-${state.setup.edition}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function importData(ev) {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const parsed = JSON.parse(r.result);
+        setState(parsed);
+        window.SuecaEngine.saveState(parsed);
+        alert("Importado.");
+      } catch (e) { alert("Ficheiro inválido."); }
+    };
+    r.readAsText(f);
+  }
+
+  if (!open) return (
+    <button className="admin-toggle" onClick={()=>setOpen(true)} title="Painel de administração">
+      ⚙
+    </button>
+  );
+
+  return (
+    <>
+      <div className="admin-backdrop" onClick={()=>setOpen(false)} />
+      <div className="admin-panel">
+        <div className="admin-head">
+          <h2>Admin</h2>
+          <button className="ghost" onClick={()=>setOpen(false)}>Fechar ✕</button>
+        </div>
+        <div className="admin-tabs">
+          {[["live","Jogo atual"],["matches","Jogos"],["teams","Equipas"],["data","Dados"]].map(([k,l]) => (
+            <button key={k} className={tab===k?"on":""} onClick={()=>setTab(k)}>{l}</button>
+          ))}
+        </div>
+
+        <div className="admin-body">
+          {tab === "live" && <AdminLive state={state} update={update} />}
+          {tab === "matches" && <AdminMatches state={state} update={update} />}
+          {tab === "teams" && <AdminTeams state={state} update={update} />}
+          {tab === "data" && (
+            <div className="admin-data">
+              <button className="primary" onClick={exportData}>Exportar backup (.json)</button>
+              <label className="file-btn">
+                Importar backup
+                <input type="file" accept="application/json" onChange={importData}/>
+              </label>
+              <button className="danger" onClick={()=>{
+                if (confirm("Tens a certeza? Isto apaga TUDO e volta ao setup.")) {
+                  const fresh = window.SuecaEngine.resetState();
+                  setState(fresh);
+                }
+              }}>Reiniciar torneio</button>
+              <div className="data-stats">
+                <div><span>Criado</span><b>{state.createdAt ? new Date(state.createdAt).toLocaleString("pt-PT") : "—"}</b></div>
+                <div><span>Jogos totais</span><b>{state.matches.length}</b></div>
+                <div><span>Jogos concluídos</span><b>{state.matches.filter(m=>m.status==="done").length}</b></div>
+                <div><span>Equipas</span><b>{state.teams.length}</b></div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AdminLive({ state, update }) {
+  const cur = window.SuecaEngine.currentMatch(state);
+  if (!cur) return <div className="empty">Sem jogos em curso. 🏆</div>;
+  const A = window.SuecaEngine.getTeam(state, cur.teamA);
+  const B = window.SuecaEngine.getTeam(state, cur.teamB);
+  const max = state.setup.pointsToWin || 10;
+  const [mvp, setMvp] = React.useState(cur.mvp || "");
+
+  function setScore(side, delta) {
+    update(s => {
+      const m = window.SuecaEngine.getMatch(s, cur.id);
+      if (side === "A") m.scoreA = Math.max(0, Math.min(max, m.scoreA + delta));
+      else m.scoreB = Math.max(0, Math.min(max, m.scoreB + delta));
+      if (!m.startedAt) m.startedAt = Date.now();
+      m.status = "live";
+    });
+  }
+
+  function declareWinner(winnerId) {
+    if (!confirm(`Terminar jogo? ${winnerId === A.id ? A.name : B.name} ganha.`)) return;
+    update(s => { window.SuecaEngine.finishMatch(s, cur.id, winnerId, mvp || null); });
+  }
+
+  const players = [A?.p1, A?.p2, B?.p1, B?.p2].filter(Boolean);
+
+  return (
+    <div className="admin-live">
+      <div className="live-title">{window.SuecaEngine.roundName(cur.round, Math.log2(window.nextPow2?.(state.teams.length) || state.teams.length))} · Jogo em curso</div>
+      <div className="live-score-cards">
+        {[{t:A,s:cur.scoreA,side:"A"},{t:B,s:cur.scoreB,side:"B"}].map(({t,s,side}) => (
+          <div key={side} className="live-score-card">
+            <div className="lsc-name">{t?.name || "—"}</div>
+            <div className="lsc-score">{s}</div>
+            <div className="lsc-btns">
+              <button onClick={()=>setScore(side,-1)}>−</button>
+              <button className="primary" onClick={()=>setScore(side,+1)}>+1</button>
+            </div>
+            <button className="declare" onClick={()=>declareWinner(t.id)}>
+              ✓ Ganha
+            </button>
+          </div>
+        ))}
+      </div>
+      <label>MVP deste jogo <span className="hint">(opcional)</span>
+        <select value={mvp} onChange={e=>setMvp(e.target.value)}>
+          <option value="">—</option>
+          {players.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function AdminMatches({ state, update }) {
+  return (
+    <div className="admin-matches">
+      {state.rounds.map((r, ri) => (
+        <div key={ri} className="admin-round">
+          <h4>{r.name}</h4>
+          {r.matchIds.map(mid => {
+            const m = window.SuecaEngine.getMatch(state, mid);
+            if (!m) return null;
+            const A = window.SuecaEngine.getTeam(state, m.teamA);
+            const B = window.SuecaEngine.getTeam(state, m.teamB);
+            return (
+              <div key={m.id} className={`admin-m row-${m.status}`}>
+                <span className="status-dot" data-s={m.status}></span>
+                <span className="ta">{A?.name || <em>—</em>}</span>
+                <input type="number" min="0" value={m.scoreA}
+                       disabled={!A || !B}
+                       onChange={e=>update(s=>{const mm=window.SuecaEngine.getMatch(s,m.id); mm.scoreA=+e.target.value||0;})}/>
+                <span className="vs">–</span>
+                <input type="number" min="0" value={m.scoreB}
+                       disabled={!A || !B}
+                       onChange={e=>update(s=>{const mm=window.SuecaEngine.getMatch(s,m.id); mm.scoreB=+e.target.value||0;})}/>
+                <span className="tb">{B?.name || <em>—</em>}</span>
+                <button className="mini"
+                  disabled={!A || !B}
+                  onClick={()=>{
+                    if (m.status === "done") {
+                      if (!confirm("Refazer resultado?")) return;
+                    }
+                    const winnerId = m.scoreA > m.scoreB ? A.id : B.id;
+                    update(s => window.SuecaEngine.finishMatch(s, m.id, winnerId));
+                  }}>
+                  {m.status === "done" ? "↻" : "✓"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AdminTeams({ state, update }) {
+  return (
+    <div className="admin-teams">
+      {state.teams.map((t, i) => (
+        <div key={t.id} className="admin-team">
+          <div className="num">{String(i+1).padStart(2,"0")}</div>
+          <input value={t.name}
+            onChange={e=>update(s=>{ s.teams[i].name = e.target.value; })} />
+          <input value={t.p1} placeholder="Jogador 1"
+            onChange={e=>update(s=>{ s.teams[i].p1 = e.target.value; })} />
+          <input value={t.p2} placeholder="Jogador 2"
+            onChange={e=>update(s=>{ s.teams[i].p2 = e.target.value; })} />
+          <div className="mini-stats">
+            <span>{t.wins}V</span><span>{t.losses}D</span><span>{t.pedras}p</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Helper used by admin
+window.nextPow2 = function(n){ let p = 1; while (p < n) p *= 2; return p; };
+
+Object.assign(window, { SetupScreen, AdminPanel });

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+build/
+dist/
+
+# Misc
+.DS_Store
+
+# Environment files — commit ONLY .env.example
+.env
+.env.*
+!.env.example
+
+# Archives / local exports
+*.zip
+
+# Local secrets / emergency backups
+.secrets/
+
+# Logs
+npm-debug.log*
+
+# Backend
+backend/main
+backend/tmp/
+
+# Docker
+postgres_data/
+
+# Claude Code session state (per-machine, never committed)
+.claude/

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Torneio de Sueca · S. Cibrão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="tournament.js"></script>
+<script type="text/babel" src="cards.jsx"></script>
+<script type="text/babel" src="setup-admin.jsx"></script>
+<script type="text/babel" src="views.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ---- View rotation config ----
+const ROTATION_DURATION = 12000; // ms per view
+
+function App() {
+  const [state, setState] = useState(() => window.SuecaEngine.loadState());
+  const [viewIdx, setViewIdx] = useState(0);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [lastWinnerId, setLastWinnerId] = useState(null);
+  const [burstTrigger, setBurstTrigger] = useState(0);
+  const [dealing, setDealing] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  // Persist on every change
+  useEffect(() => { window.SuecaEngine.saveState(state); }, [state]);
+
+  // Re-render every second for clock / elapsed
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Detect a new win → fire burst
+  useEffect(() => {
+    if (!state.history.length) return;
+    const latest = state.history[0];
+    if (latest && latest.id !== lastWinnerId) {
+      setLastWinnerId(latest.id);
+      setBurstTrigger(b => b + 1);
+    }
+  }, [state.history]);
+
+  // View rotation
+  const hasActiveMatches = state.matches.some(m => m.status === "pending" || m.status === "live");
+  const allDone = state.matches.length > 0 && !hasActiveMatches;
+
+  // Build view list dynamically
+  const views = React.useMemo(() => {
+    const list = [];
+    if (allDone) {
+      list.push({ key: "finale", label: "Campeões", render: () => <FinaleView state={state}/> });
+    } else {
+      list.push({ key: "now", label: "Em Jogo", render: () => <ViewNowPlaying state={state}/> });
+    }
+    if (state.format === "knockout" || state.format === "groups") {
+      list.push({ key: "bracket", label: state.format==="groups"?"Grupos":"Bracket", render: () => <ViewBracket state={state}/> });
+    }
+    list.push({ key: "rank", label: "Ranking", render: () => <ViewRanking state={state}/> });
+    list.push({ key: "upc", label: "Próx/Hist", render: () => <ViewUpcomingHistory state={state}/> });
+    if (Object.keys(state.mvpVotes).length > 0) {
+      list.push({ key: "mvp", label: "MVPs", render: () => <ViewMVP state={state}/> });
+    }
+    if (state.setup.qrUrl) {
+      list.push({ key: "qr", label: "QR", render: () => <ViewQR state={state}/> });
+    }
+    return list;
+  }, [state, allDone]);
+
+  useEffect(() => {
+    if (paused || views.length <= 1) return;
+    const t = setInterval(() => {
+      setDealing(true);
+      setTimeout(() => {
+        setViewIdx(i => (i + 1) % views.length);
+        setTimeout(() => setDealing(false), 400);
+      }, 400);
+    }, ROTATION_DURATION);
+    return () => clearInterval(t);
+  }, [paused, views.length]);
+
+  // Clamp viewIdx
+  useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function onKey(e) {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      if (e.key === " ") { e.preventDefault(); setPaused(p => !p); }
+      if (e.key === "ArrowRight") setViewIdx(i => (i + 1) % views.length);
+      if (e.key === "ArrowLeft") setViewIdx(i => (i - 1 + views.length) % views.length);
+      if (e.key === "a" || e.key === "A") setAdminOpen(o => !o);
+      if (e.key === "f" || e.key === "F") {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [views.length]);
+
+  const hasStarted = state.matches.length > 0;
+  const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
+
+  if (!hasStarted) {
+    return (
+      <>
+        <AmbientCards count={8} />
+        <SetupScreen state={state} setState={setState} onStart={() => {}} />
+      </>
+    );
+  }
+
+  const currentView = views[viewIdx] || views[0];
+
+  return (
+    <>
+      <AmbientCards count={5} />
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
+        {currentView && currentView.render()}
+      </ProjectorFrame>
+      <CardBurst trigger={burstTrigger} />
+      <DealingCards playing={dealing} />
+      <AdminPanel state={state} setState={setState} open={adminOpen} setOpen={setAdminOpen} />
+
+      {paused && (
+        <div className="pause-indicator">⏸ Rotação pausada · Espaço para retomar</div>
+      )}
+
+      <div className="kbd-hints">
+        <span>Espaço <em>pausa</em></span>
+        <span>← → <em>mudar vista</em></span>
+        <span>A <em>admin</em></span>
+        <span>F <em>ecrã cheio</em></span>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<style>
+.pause-indicator {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: rgba(212,168,83,0.9); color: #082a20;
+  padding: 8px 20px; border-radius: 20px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.15em; text-transform: uppercase; z-index: 45;
+  animation: pulse 2s infinite;
+}
+.kbd-hints {
+  position: fixed; bottom: 20px; left: 20px;
+  display: flex; gap: 16px; z-index: 45;
+  font-size: 10px; letter-spacing: 0.1em; color: rgba(245,230,200,0.35);
+  text-transform: uppercase;
+}
+.kbd-hints span { display: flex; gap: 6px; }
+.kbd-hints em { font-style: normal; color: rgba(245,230,200,0.6); letter-spacing: 0.05em; }
+</style>
+</body>
+</html>
