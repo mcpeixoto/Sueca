@@ -52,21 +52,23 @@ function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel }) {
 
 // ---- View: Now Playing (current match or simultaneous live matches) ----
 function roundLabel(state, m) {
-  return state.format === "knockout"
-    ? window.SuecaEngine.roundName(m.round, Math.log2(window.nextPow2(state.teams.length)))
-    : (state.rounds[m.round-1]?.name || `Ronda ${m.round}`);
+  if (state.format === "knockout") {
+    return window.SuecaEngine.roundName(m.round, Math.log2(window.nextPow2(state.teams.length)));
+  }
+  const meta = state.rounds.find(r => r.matchIds.includes(m.id));
+  return meta?.name || `Ronda ${m.round}`;
 }
 
 function ViewNowPlaying({ state }) {
-  const live = window.SuecaEngine.liveMatches(state);
+  const stageMatches = window.SuecaEngine.activeStageMatches(state);
   const max = state.setup.pointsToWin || 12;
 
-  if (live.length >= 2) {
-    const cols = live.length <= 2 ? 2 : live.length <= 4 ? 2 : 3;
+  if (stageMatches.length >= 2) {
+    const cols = stageMatches.length <= 2 ? 2 : stageMatches.length <= 4 ? 2 : 3;
     return (
       <div className="view now-playing np-multi">
         <div className="np-multi-grid" style={{gridTemplateColumns: `repeat(${cols}, 1fr)`}}>
-          {live.map(m => (
+          {stageMatches.map(m => (
             <MatchCard key={m.id} state={state} match={m} max={max} roundName={roundLabel(state, m)} />
           ))}
         </div>
@@ -74,7 +76,7 @@ function ViewNowPlaying({ state }) {
     );
   }
 
-  const m = live[0] || window.SuecaEngine.currentMatch(state);
+  const m = stageMatches[0] || window.SuecaEngine.currentMatch(state);
   if (!m) return <FinaleView state={state} />;
   const A = window.SuecaEngine.getTeam(state, m.teamA);
   const B = window.SuecaEngine.getTeam(state, m.teamB);
@@ -107,7 +109,7 @@ function MatchCard({ state, match, max, roundName }) {
     <div className={`match-card status-${match.status}`}>
       <div className="mc-head">
         <span className="mc-round">{roundName}</span>
-        <span className="mc-live">● AO VIVO</span>
+        <span className={`mc-live status-${match.status}`}>{match.status === "live" ? "● AO VIVO" : "A INICIAR"}</span>
       </div>
       <div className="mc-body">
         <div className="mc-side">
@@ -248,9 +250,7 @@ function ViewUpcomingHistory({ state }) {
             {upcoming.map((m, i) => {
               const A = window.SuecaEngine.getTeam(state, m.teamA);
               const B = window.SuecaEngine.getTeam(state, m.teamB);
-              const rName = state.format === "knockout"
-                ? window.SuecaEngine.roundName(m.round, Math.log2(window.nextPow2(state.teams.length)))
-                : (state.rounds[m.round-1]?.name || `Ronda ${m.round}`);
+              const rName = roundLabel(state, m);
               return (
                 <div key={m.id} className="up-row" style={{animationDelay:`${i*0.08}s`}}>
                   <div className="up-round">{rName}</div>

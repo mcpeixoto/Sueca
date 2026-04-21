@@ -315,8 +315,8 @@ function startTournament(state) {
   state.format = state.setup.format;
   state.createdAt = Date.now();
   if (!state.tournamentId) state.tournamentId = newTournamentId();
-  // set first match
-  const first = state.matches.find(m => m.status === "pending");
+  // Track the first active match for legacy single-match consumers.
+  const first = activeStageMatches(state)[0] || state.matches.find(m => m.status === "pending");
   state.currentMatchId = first ? first.id : null;
   return state;
 }
@@ -332,6 +332,22 @@ function setMatchScore(state, matchId, scoreA, scoreB) {
   m.scoreB = scoreB;
   if (!m.startedAt) m.startedAt = Date.now();
   m.status = "live";
+}
+
+function activeStageMatches(state) {
+  const active = state.matches.filter(m => m.status === "pending" || m.status === "live");
+  if (!active.length) return [];
+  const live = active.filter(m => m.status === "live");
+  const source = live.length ? live : active;
+  const targetRound = Math.min(...source.map(m => m.round || 0));
+  return active
+    .filter(m => (m.round || 0) === targetRound)
+    .sort((a, b) => {
+      const slotA = a.bracketSlot ?? Number.MAX_SAFE_INTEGER;
+      const slotB = b.bracketSlot ?? Number.MAX_SAFE_INTEGER;
+      if (slotA !== slotB) return slotA - slotB;
+      return a.id.localeCompare(b.id);
+    });
 }
 
 function finishMatch(state, matchId, winnerId) {
@@ -392,8 +408,8 @@ function finishMatch(state, matchId, winnerId) {
     });
   }
 
-  // pick next match for projection
-  const next = state.matches.find(x => x.status === "pending");
+  // Keep the projector/admin focused on the current active stage.
+  const next = activeStageMatches(state)[0] || state.matches.find(x => x.status === "pending");
   state.currentMatchId = next ? next.id : null;
   return state;
 }
@@ -444,9 +460,8 @@ function nextMatches(state, limit = 3) {
 }
 
 function currentMatch(state) {
-  const live = state.matches.find(m => m.status === "live");
-  if (live) return live;
-  return state.matches.find(m => m.id === state.currentMatchId) ||
+  return activeStageMatches(state)[0] ||
+         state.matches.find(m => m.id === state.currentMatchId) ||
          state.matches.find(m => m.status === "pending");
 }
 
@@ -462,7 +477,7 @@ Object.assign(window, {
     getMatch, getTeam,
     setMatchScore, finishMatch,
     standings, groupStandings,
-    nextMatches, currentMatch, liveMatches,
+    nextMatches, currentMatch, liveMatches, activeStageMatches,
     roundName, uid,
     loadRemoteState, pushRemoteState, getPublicBase, newTournamentId,
   }

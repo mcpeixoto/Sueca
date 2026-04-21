@@ -255,7 +255,7 @@ function AdminPanel({ state, setState, open, setOpen }) {
           <button className="ghost" onClick={()=>setOpen(false)}>Fechar ✕</button>
         </div>
         <div className="admin-tabs">
-          {[["live","Jogo atual"],["matches","Jogos"],["teams","Equipas"],["sponsors","Patrocinadores"],["data","Dados"]].map(([k,l]) => (
+          {[["live","Jogos atuais"],["matches","Jogos"],["teams","Equipas"],["sponsors","Patrocinadores"],["data","Dados"]].map(([k,l]) => (
             <button key={k} className={tab===k?"on":""} onClick={()=>setTab(k)}>{l}</button>
           ))}
         </div>
@@ -316,14 +316,24 @@ function AdminPanel({ state, setState, open, setOpen }) {
 }
 
 function AdminLive({ state, update }) {
-  const cur = window.SuecaEngine.currentMatch(state);
-  if (!cur) return <div className="empty">Sem jogos em curso. 🏆</div>;
-  const A = window.SuecaEngine.getTeam(state, cur.teamA);
-  const B = window.SuecaEngine.getTeam(state, cur.teamB);
+  const current = window.SuecaEngine.activeStageMatches(state);
   const max = state.setup.pointsToWin || 12;
-  function setScore(side, delta) {
+  if (!current.length) return <div className="empty">Sem jogos em curso. 🏆</div>;
+
+  function stageLabel(match) {
+    if (state.format === "knockout") {
+      return window.SuecaEngine.roundName(match.round, Math.log2(window.nextPow2?.(state.teams.length) || state.teams.length));
+    }
+    const meta = state.rounds.find(r => r.matchIds.includes(match.id));
+    return meta?.name || `Ronda ${match.round}`;
+  }
+
+  const titleLabel = Array.from(new Set(current.map(stageLabel))).length === 1 ? stageLabel(current[0]) : "Fase atual";
+
+  function setScore(matchId, side, delta) {
     update(s => {
-      const m = window.SuecaEngine.getMatch(s, cur.id);
+      const m = window.SuecaEngine.getMatch(s, matchId);
+      if (!m) return;
       if (side === "A") m.scoreA = Math.max(0, Math.min(max, m.scoreA + delta));
       else m.scoreB = Math.max(0, Math.min(max, m.scoreB + delta));
       if (!m.startedAt) m.startedAt = Date.now();
@@ -331,34 +341,50 @@ function AdminLive({ state, update }) {
     });
   }
 
-  function declareWinner(winnerId) {
-    update(s => { window.SuecaEngine.finishMatch(s, cur.id, winnerId); });
+  function declareWinner(matchId, winnerId) {
+    update(s => { window.SuecaEngine.finishMatch(s, matchId, winnerId); });
     window.dispatchEvent(new CustomEvent("sueca:jumpView", { detail: { key: "now" } }));
   }
 
   return (
     <div className="admin-live">
-      <div className="live-title">{window.SuecaEngine.roundName(cur.round, Math.log2(window.nextPow2?.(state.teams.length) || state.teams.length))} · Jogo em curso</div>
+      <div className="live-title">{titleLabel} · Jogos atuais</div>
       <div className="live-score-cards">
-        {[{t:A,s:cur.scoreA,side:"A"},{t:B,s:cur.scoreB,side:"B"}].map(({t,s,side}) => (
-          <div key={side} className="live-score-card">
-            <div className="lsc-name">{t?.name || "—"}</div>
-            <div className="lsc-score">{s}</div>
-            <div className="lsc-btns">
-              <button onClick={()=>setScore(side,-1)}>−</button>
-              <button className="primary" onClick={()=>setScore(side,+1)}>+1</button>
+        {current.map(match => {
+          const A = window.SuecaEngine.getTeam(state, match.teamA);
+          const B = window.SuecaEngine.getTeam(state, match.teamB);
+          return (
+            <div key={match.id} className={`live-score-card stage-${match.status}`}>
+              <div className="live-score-card-head">
+                <div className="lsc-round">{stageLabel(match)}</div>
+                <div className={`lsc-status status-${match.status}`}>{match.status === "live" ? "Ao vivo" : "A iniciar"}</div>
+              </div>
+              <div className="live-score-match">{A?.name || "—"} <span>vs.</span> {B?.name || "—"}</div>
+              <div className="live-score-cards-inner">
+                {[{ t: A, s: match.scoreA, side: "A" }, { t: B, s: match.scoreB, side: "B" }].map(({ t, s, side }) => (
+                  <div key={side} className="live-side-card">
+                    <div className="lsc-name">{t?.name || "—"}</div>
+                    <div className="lsc-score">{s}</div>
+                    <div className="lsc-btns">
+                      <button onClick={() => setScore(match.id, side, -1)}>−</button>
+                      <button className="primary" onClick={() => setScore(match.id, side, +1)}>+1</button>
+                    </div>
+                    <button className="declare" disabled={!t} onClick={() => declareWinner(match.id, t.id)}>
+                      ✓ Ganha
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <button className="declare" onClick={()=>declareWinner(t.id)}>
-              ✓ Ganha
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
 function AdminMatches({ state, update }) {
+  const max = state.setup.pointsToWin || 12;
   return (
     <div className="admin-matches">
       {state.rounds.map((r, ri) => (
@@ -375,17 +401,27 @@ function AdminMatches({ state, update }) {
                 <span className="ta">{A?.name || <em>—</em>}</span>
                 <input type="number" min="0" value={m.scoreA}
                        disabled={!A || !B}
-                       onChange={e=>update(s=>{const mm=window.SuecaEngine.getMatch(s,m.id); mm.scoreA=+e.target.value||0;})}/>
+                       onChange={e=>update(s=>{
+                         const mm = window.SuecaEngine.getMatch(s, m.id);
+                         window.SuecaEngine.setMatchScore(s, m.id, Math.max(0, Math.min(max, +e.target.value || 0)), mm?.scoreB || 0);
+                       })}/>
                 <span className="vs">–</span>
                 <input type="number" min="0" value={m.scoreB}
                        disabled={!A || !B}
-                       onChange={e=>update(s=>{const mm=window.SuecaEngine.getMatch(s,m.id); mm.scoreB=+e.target.value||0;})}/>
+                       onChange={e=>update(s=>{
+                         const mm = window.SuecaEngine.getMatch(s, m.id);
+                         window.SuecaEngine.setMatchScore(s, m.id, mm?.scoreA || 0, Math.max(0, Math.min(max, +e.target.value || 0)));
+                       })}/>
                 <span className="tb">{B?.name || <em>—</em>}</span>
                 <button className="mini"
                   disabled={!A || !B}
                   onClick={()=>{
                     if (m.status === "done") {
                       if (!confirm("Refazer resultado?")) return;
+                    }
+                    if (m.scoreA === m.scoreB) {
+                      alert("Empates nao podem ser fechados. Ajusta o vencedor primeiro.");
+                      return;
                     }
                     const winnerId = m.scoreA > m.scoreB ? A.id : B.id;
                     update(s => window.SuecaEngine.finishMatch(s, m.id, winnerId));
