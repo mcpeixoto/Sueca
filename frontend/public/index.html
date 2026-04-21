@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/styles.css?v=8">
+<link rel="stylesheet" href="/styles.css?v=9">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -18,12 +18,33 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
 <script src="/vendor/qrcode.min.js"></script>
-<script src="/tournament.js?v=8"></script>
-<script type="text/babel" src="/cards.jsx?v=8"></script>
-<script type="text/babel" src="/setup-admin.jsx?v=8"></script>
-<script type="text/babel" src="/views.jsx?v=8"></script>
+<script src="/tournament.js?v=9"></script>
+<script type="text/babel" src="/cards.jsx?v=9"></script>
+<script type="text/babel" src="/setup-admin.jsx?v=9"></script>
+<script type="text/babel" src="/views.jsx?v=9"></script>
 
 <script type="text/babel">
+// Cache-bust version for frontend deploys.
+// Bump this value whenever JS/CSS/HTML changes need to be forced onto clients.
+// Keep the `?v=` asset query params below in sync with this version.
+const APP_VERSION = "9";
+const APP_VERSION_KEY = "sueca_app_version";
+const RELOAD_GUARD_KEY = "sueca_app_version_reload";
+
+try {
+  const seenVersion = localStorage.getItem(APP_VERSION_KEY);
+  const reloadGuard = sessionStorage.getItem(RELOAD_GUARD_KEY);
+  if (seenVersion !== APP_VERSION && reloadGuard !== APP_VERSION) {
+    localStorage.setItem(APP_VERSION_KEY, APP_VERSION);
+    sessionStorage.setItem(RELOAD_GUARD_KEY, APP_VERSION);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("_v", APP_VERSION);
+    window.location.replace(nextUrl.toString());
+  } else if (reloadGuard === APP_VERSION) {
+    sessionStorage.removeItem(RELOAD_GUARD_KEY);
+  }
+} catch (e) {}
+
 const { useState, useEffect, useRef } = React;
 
 // ---- View rotation config ----
@@ -36,6 +57,7 @@ function rotationMs(state) {
 function App({ initialState }) {
   const [state, setState] = useState(() => initialState || window.SuecaEngine.loadState());
   const [viewIdx, setViewIdx] = useState(0);
+  const [viewStartedAt, setViewStartedAt] = useState(Date.now());
   const [adminOpen, setAdminOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [lastWinnerId, setLastWinnerId] = useState(null);
@@ -113,6 +135,7 @@ function App({ initialState }) {
 
   // Clamp viewIdx
   useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
+  useEffect(() => { setViewStartedAt(Date.now()); }, [viewIdx]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -133,6 +156,7 @@ function App({ initialState }) {
 
   const hasStarted = state.matches.length > 0;
   const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
+  const rotationProgress = paused || views.length <= 1 ? 0 : Math.min(1, (nowTick - viewStartedAt) / rotationMs(state));
 
   if (!hasStarted) {
     return (
@@ -148,7 +172,7 @@ function App({ initialState }) {
   return (
     <>
       <AmbientCards count={5} />
-      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs} rotationProgress={rotationProgress}>
         {currentView && currentView.render()}
       </ProjectorFrame>
       <CardBurst trigger={burstTrigger} />
@@ -174,6 +198,7 @@ function SpectatorApp({ tournamentId }) {
   const [state, setState] = useState(null);
   const [err, setErr] = useState(null);
   const [viewIdx, setViewIdx] = useState(0);
+  const [viewStartedAt, setViewStartedAt] = useState(Date.now());
   const [nowTick, setNowTick] = useState(Date.now());
   const [autoRotate, setAutoRotate] = useState(() => {
     try {
@@ -231,6 +256,7 @@ function SpectatorApp({ tournamentId }) {
   }, [autoRotate, views.length, state]);
 
   useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
+  useEffect(() => { setViewStartedAt(Date.now()); }, [viewIdx]);
 
   function selectView(idx) {
     setViewIdx(idx);
@@ -249,11 +275,12 @@ function SpectatorApp({ tournamentId }) {
 
   const currentView = views[viewIdx] || views[0];
   const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
+  const rotationProgress = autoRotate && views.length > 1 ? Math.min(1, (nowTick - viewStartedAt) / rotationMs(state)) : 0;
 
   return (
     <>
       <AmbientCards count={5} />
-      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs} rotationProgress={rotationProgress}>
         {currentView && currentView.render()}
       </ProjectorFrame>
       <div className="spectator-badge">VISTA DO ESPECTADOR</div>

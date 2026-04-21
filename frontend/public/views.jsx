@@ -21,7 +21,7 @@ function fmtDate(d){
 }
 
 // ---- Projector Frame (header/footer, kept across views) ----
-function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel, elapsedMs }) {
+function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel, elapsedMs, rotationProgress }) {
   const now = useClock();
   const elapsedH = Math.floor(elapsedMs / 3600000);
   const elapsedM = Math.floor((elapsedMs % 3600000) / 60000);
@@ -39,10 +39,15 @@ function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel, elapse
           <div className="ph-elapsed">Duração · {elapsedH}h {String(elapsedM).padStart(2,"0")}m</div>
         </div>
       </header>
-      <div className="pf-views pf-views-top">
-        {Array.from({length: viewCount}).map((_, i) => (
-          <div key={i} className={`pf-dot ${i===viewIdx?"on":""}`} />
-        ))}
+      <div className="pf-views-wrap">
+        <div className="pf-progress" aria-hidden="true">
+          <div className="pf-progress-fill" style={{ width: `${Math.max(0, Math.min(1, rotationProgress || 0)) * 100}%` }} />
+        </div>
+        <div className="pf-views pf-views-top">
+          {Array.from({length: viewCount}).map((_, i) => (
+            <div key={i} className={`pf-dot ${i===viewIdx?"on":""}`} />
+          ))}
+        </div>
       </div>
       {viewLabel && <div key={viewLabel} className="slide-label">{viewLabel}</div>}
       <div className="proj-main">{children}</div>
