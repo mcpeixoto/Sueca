@@ -11,22 +11,15 @@ Projector-facing tournament dashboard for a **Sueca** (Portuguese 4-player trick
 ## Getting started
 
 ```bash
-cp .env.example .env.dev    # edit values
-./app.sh dev                # boots compose stack on dev env
-```
-
-Production:
-
-```bash
 cp .env.example .env.prod   # fill POSTGRES_PASSWORD + JWT_SECRET with real values
-./app.sh prod
+./app.sh start
 ```
 
-The frontend is exposed on `FRONTEND_PORT` (default 8280 for dev, 80 for prod); the backend is only reachable on the internal Docker network and must be fronted by a reverse proxy in production.
+The frontend is exposed on `FRONTEND_PORT` (default 80); the backend is only reachable on the internal Docker network and must be fronted by a reverse proxy.
 
 ### Environment files
 
-Only `.env.example` is tracked. `.env.dev` / `.env.prod` are ignored by `.gitignore` — keep local secrets out of the repo.
+Only `.env.example` is tracked. `.env.prod` is ignored by `.gitignore` — keep secrets out of the repo.
 
 ## Keyboard shortcuts (projector)
 

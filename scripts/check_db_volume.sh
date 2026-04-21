@@ -1,14 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Accept environment parameter (default: prod)
-ENV="${1:-prod}"
-
-if [ "$ENV" = "dev" ]; then
-  VOLUME_NAME="sueca-dev_postgres_data"
-else
-  VOLUME_NAME="sueca_postgres_data"
-fi
+VOLUME_NAME="sueca_postgres_data"
 
 if ! docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
   echo "[DB GUARD] Missing volume '$VOLUME_NAME'. Refusing to start to avoid wiping data." >&2
