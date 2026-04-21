@@ -126,11 +126,8 @@ button.danger:hover { background: var(--red-bright); }
 
 .proj-main { flex: 1; position: relative; overflow: hidden; }
 .proj-footer { display: flex; justify-content: center; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); font-size: 11px; letter-spacing: 0.15em; color: var(--ink-dim); }
-.pf-views-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 0 0 14px; }
-.pf-progress { position: relative; width: min(320px, 42vw); height: 6px; border-radius: 999px; background: rgba(245,230,200,0.08); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(245,230,200,0.06); }
-.pf-progress-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, rgba(236,201,120,0.92), rgba(212,168,83,0.96)); box-shadow: 0 0 14px rgba(212,168,83,0.3); transition: width 0.9s linear; }
 .pf-views { display: flex; gap: 16px; align-items: center; }
-.pf-views-top { justify-content: center; margin: 0; }
+.pf-views-top { justify-content: center; margin: 0 0 14px; }
 .pf-dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: all 0.3s; }
 .pf-dot.on { background: var(--gold); width: 40px; border-radius: 4px; }
 .pf-motto { font-family: var(--font-serif); font-style: italic; font-size: 13px; letter-spacing: 0.05em; color: var(--gold); }
@@ -434,8 +431,6 @@ button.danger:hover { background: var(--red-bright); }
 
   .slide-label { font-size: 22px; letter-spacing: 0.18em; margin: 4px 0 16px; }
   .slide-label::before, .slide-label::after { margin: 0 10px; font-size: 16px; }
-  .pf-views-wrap { gap: 8px; margin: 0 0 12px; }
-  .pf-progress { width: min(220px, 62vw); height: 5px; }
 
   .proj-main { overflow: visible; }
   .view { position: static; }

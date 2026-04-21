@@ -27,6 +27,7 @@
 // Cache-bust version for frontend deploys.
 // Bump this value whenever JS/CSS/HTML changes need to be forced onto clients.
 // Keep the `?v=` asset query params below in sync with this version.
+// After bumping it, redeploy/restart the frontend so clients receive the new version.
 const APP_VERSION = "9";
 const APP_VERSION_KEY = "sueca_app_version";
 const RELOAD_GUARD_KEY = "sueca_app_version_reload";
@@ -57,7 +58,6 @@ function rotationMs(state) {
 function App({ initialState }) {
   const [state, setState] = useState(() => initialState || window.SuecaEngine.loadState());
   const [viewIdx, setViewIdx] = useState(0);
-  const [viewStartedAt, setViewStartedAt] = useState(Date.now());
   const [adminOpen, setAdminOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [lastWinnerId, setLastWinnerId] = useState(null);
@@ -135,7 +135,6 @@ function App({ initialState }) {
 
   // Clamp viewIdx
   useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
-  useEffect(() => { setViewStartedAt(Date.now()); }, [viewIdx]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -156,7 +155,6 @@ function App({ initialState }) {
 
   const hasStarted = state.matches.length > 0;
   const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
-  const rotationProgress = paused || views.length <= 1 ? 0 : Math.min(1, (nowTick - viewStartedAt) / rotationMs(state));
 
   if (!hasStarted) {
     return (
@@ -172,7 +170,7 @@ function App({ initialState }) {
   return (
     <>
       <AmbientCards count={5} />
-      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs} rotationProgress={rotationProgress}>
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
         {currentView && currentView.render()}
       </ProjectorFrame>
       <CardBurst trigger={burstTrigger} />
@@ -198,7 +196,6 @@ function SpectatorApp({ tournamentId }) {
   const [state, setState] = useState(null);
   const [err, setErr] = useState(null);
   const [viewIdx, setViewIdx] = useState(0);
-  const [viewStartedAt, setViewStartedAt] = useState(Date.now());
   const [nowTick, setNowTick] = useState(Date.now());
   const [autoRotate, setAutoRotate] = useState(() => {
     try {
@@ -256,7 +253,6 @@ function SpectatorApp({ tournamentId }) {
   }, [autoRotate, views.length, state]);
 
   useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
-  useEffect(() => { setViewStartedAt(Date.now()); }, [viewIdx]);
 
   function selectView(idx) {
     setViewIdx(idx);
@@ -275,12 +271,11 @@ function SpectatorApp({ tournamentId }) {
 
   const currentView = views[viewIdx] || views[0];
   const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
-  const rotationProgress = autoRotate && views.length > 1 ? Math.min(1, (nowTick - viewStartedAt) / rotationMs(state)) : 0;
 
   return (
     <>
       <AmbientCards count={5} />
-      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs} rotationProgress={rotationProgress}>
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
         {currentView && currentView.render()}
       </ProjectorFrame>
       <div className="spectator-badge">VISTA DO ESPECTADOR</div>
