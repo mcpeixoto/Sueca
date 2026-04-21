@@ -90,9 +90,6 @@ function App({ initialState }) {
     }
     list.push({ key: "rank", label: "Ranking", render: () => <ViewRanking state={state}/> });
     list.push({ key: "upc", label: "Próx/Hist", render: () => <ViewUpcomingHistory state={state}/> });
-    if (Object.keys(state.mvpVotes).length > 0) {
-      list.push({ key: "mvp", label: "MVPs", render: () => <ViewMVP state={state}/> });
-    }
     if (state.tournamentId) {
       list.push({ key: "qr", label: "QR", render: () => <ViewQR state={state}/> });
     }
@@ -178,6 +175,13 @@ function SpectatorApp({ tournamentId }) {
   const [err, setErr] = useState(null);
   const [viewIdx, setViewIdx] = useState(0);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [autoRotate, setAutoRotate] = useState(() => {
+    try {
+      return !window.matchMedia("(pointer: coarse)").matches;
+    } catch (e) {
+      return true;
+    }
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -214,9 +218,6 @@ function SpectatorApp({ tournamentId }) {
     }
     list.push({ key: "rank", label: "Ranking", render: () => <ViewRanking state={state}/> });
     list.push({ key: "upc", label: "Próx/Hist", render: () => <ViewUpcomingHistory state={state}/> });
-    if (Object.keys(state.mvpVotes || {}).length > 0) {
-      list.push({ key: "mvp", label: "MVPs", render: () => <ViewMVP state={state}/> });
-    }
     if (state.setup.sponsors && state.setup.sponsors.length > 0) {
       list.push({ key: "sponsors", label: "Patrocinadores", render: () => <ViewSponsors state={state}/> });
     }
@@ -224,12 +225,17 @@ function SpectatorApp({ tournamentId }) {
   }, [state]);
 
   useEffect(() => {
-    if (views.length <= 1) return;
+    if (!autoRotate || views.length <= 1) return;
     const t = setInterval(() => setViewIdx(i => (i + 1) % views.length), rotationMs(state));
     return () => clearInterval(t);
-  }, [views.length]);
+  }, [autoRotate, views.length, state]);
 
   useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
+
+  function selectView(idx) {
+    setViewIdx(idx);
+    setAutoRotate(false);
+  }
 
   if (!state) {
     return (
@@ -251,6 +257,34 @@ function SpectatorApp({ tournamentId }) {
         {currentView && currentView.render()}
       </ProjectorFrame>
       <div className="spectator-badge">VISTA DO ESPECTADOR</div>
+      {views.length > 1 && (
+        <div className="spectator-controls">
+          <div className="spectator-controls-head">
+            <div className="spectator-controls-title">Escolher vista</div>
+            <button
+              className={`spectator-rotate-toggle ${autoRotate ? "on" : ""}`}
+              onClick={() => setAutoRotate(v => !v)}
+              type="button"
+            >
+              {autoRotate ? "Auto" : "Manual"}
+            </button>
+          </div>
+          <div className="spectator-tabs" role="tablist" aria-label="Vistas do espectador">
+            {views.map((view, idx) => (
+              <button
+                key={view.key}
+                type="button"
+                role="tab"
+                aria-selected={idx === viewIdx}
+                className={`spectator-tab ${idx === viewIdx ? "on" : ""}`}
+                onClick={() => selectView(idx)}
+              >
+                {view.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -299,14 +333,109 @@ if (_viewMatch) {
 .kbd-hints span { display: flex; gap: 6px; }
 .kbd-hints em { font-style: normal; color: rgba(245,230,200,0.6); letter-spacing: 0.05em; }
 .spectator-badge {
-  position: fixed; top: 20px; right: 20px;
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
   background: rgba(212,168,83,0.85); color: #082a20;
-  padding: 6px 14px; border-radius: 14px; font-size: 10px; font-weight: 700;
-  letter-spacing: 0.2em; z-index: 45;
+  padding: 7px 16px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.2em; z-index: 45; text-align: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
 }
 .spectator-loading {
   display: flex; align-items: center; justify-content: center;
   width: 100vw; height: 100vh;
+}
+.spectator-controls {
+  position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(94vw, 760px);
+  background: rgba(8,42,32,0.82);
+  border: 1px solid rgba(245,230,200,0.12);
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.32);
+  backdrop-filter: blur(16px);
+  padding: 12px;
+  z-index: 45;
+}
+.spectator-controls-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px;
+}
+.spectator-controls-title {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(245,230,200,0.62); font-weight: 700;
+}
+.spectator-rotate-toggle {
+  min-width: 88px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(245,230,200,0.08);
+  border: 1px solid rgba(245,230,200,0.1);
+  color: rgba(245,230,200,0.82);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.spectator-rotate-toggle.on {
+  background: rgba(212,168,83,0.88);
+  border-color: rgba(236,201,120,0.9);
+  color: #082a20;
+}
+.spectator-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.spectator-tabs::-webkit-scrollbar { display: none; }
+.spectator-tab {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 11px 16px;
+  border-radius: 999px;
+  background: rgba(245,230,200,0.05);
+  border: 1px solid rgba(245,230,200,0.09);
+  color: rgba(245,230,200,0.78);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.spectator-tab.on {
+  background: linear-gradient(180deg, rgba(236,201,120,0.98), rgba(212,168,83,0.92));
+  color: #082a20;
+  border-color: rgba(236,201,120,0.95);
+}
+@media (max-width: 760px) {
+  .spectator-badge {
+    top: max(10px, env(safe-area-inset-top));
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    padding: 7px 14px;
+  }
+  .spectator-controls {
+    width: calc(100vw - 16px);
+    bottom: max(8px, env(safe-area-inset-bottom));
+    padding: 10px;
+    border-radius: 18px;
+  }
+  .spectator-controls-head {
+    margin-bottom: 8px;
+  }
+  .spectator-controls-title {
+    font-size: 9px;
+  }
+  .spectator-rotate-toggle {
+    min-width: 78px;
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  .spectator-tab {
+    min-height: 42px;
+    padding: 10px 14px;
+    font-size: 12px;
+  }
 }
 </style>
 </body>

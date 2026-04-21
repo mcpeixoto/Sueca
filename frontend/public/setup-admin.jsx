@@ -10,7 +10,7 @@ function SetupScreen({ state, setState, onStart }) {
   const [format, setFormat] = React.useState(state.setup.format);
   const [teamCount, setTeamCount] = React.useState(state.setup.teamCount || 8);
   const [groupsOf, setGroupsOf] = React.useState(state.setup.groupsOf || 4);
-  const [pointsToWin, setPointsToWin] = React.useState(state.setup.pointsToWin || 10);
+  const [pointsToWin, setPointsToWin] = React.useState(state.setup.pointsToWin || 12);
   const [pointsPerWin, setPointsPerWin] = React.useState(state.setup.pointsPerWin || 3);
   const [tiebreaker, setTiebreaker] = React.useState(state.setup.tiebreaker || "pedras");
   const [slideSeconds, setSlideSeconds] = React.useState(state.setup.slideSeconds || 24);
@@ -44,7 +44,7 @@ function SetupScreen({ state, setState, onStart }) {
     const next = window.SuecaEngine.clone(state);
     next.setup = { name, edition, format, teamCount: filled.length, pointsToWin, pointsPerWin, tiebreaker, slideSeconds, liveScore, groupsOf, sponsors };
     next.teams = filled.map(t => window.SuecaEngine.makeTeam(t.name, t.p1, t.p2));
-    next.matches = []; next.rounds = []; next.history = []; next.mvpVotes = {};
+    next.matches = []; next.rounds = []; next.history = [];
     const started = window.SuecaEngine.startTournament(next);
     setState(started);
     window.SuecaEngine.saveState(started);
@@ -93,7 +93,7 @@ function SetupScreen({ state, setState, onStart }) {
           </div>
           <p className="lead">
             Configura o torneio abaixo. Depois liga o projetor, carrega em <b>Começar</b>, e nunca mais te preocupas —
-            o ecrã roda sozinho entre o jogo atual, bracket, ranking e MVP.
+            o ecrã roda sozinho entre o jogo atual, bracket, ranking e próximos jogos.
           </p>
           <div className="corner-ornament">♠ ♥ ♦ ♣</div>
         </div>
@@ -129,11 +129,11 @@ function SetupScreen({ state, setState, onStart }) {
                 <input type="number" min="2" max="32" value={teamCount}
                        onChange={e=>setTeamCount(Math.max(2, +e.target.value||2))}/>
               </label>
-              <label>Pontos para ganhar jogo
-                <input type="number" min="1" max="20" value={pointsToWin}
-                       onChange={e=>setPointsToWin(+e.target.value||10)}/>
+              <label>Máx. de pontos por jogo
+                <input type="number" min="1" max="12" value={pointsToWin}
+                       onChange={e=>setPointsToWin(Math.min(12, Math.max(1, +e.target.value || 12)))}/>
               </label>
-              <label>Pontos por vitória
+              <label>Pontos de torneio por vitória
                 <input type="number" min="1" max="10" value={pointsPerWin}
                        onChange={e=>setPointsPerWin(+e.target.value||3)}/>
               </label>
@@ -320,9 +320,7 @@ function AdminLive({ state, update }) {
   if (!cur) return <div className="empty">Sem jogos em curso. 🏆</div>;
   const A = window.SuecaEngine.getTeam(state, cur.teamA);
   const B = window.SuecaEngine.getTeam(state, cur.teamB);
-  const max = state.setup.pointsToWin || 10;
-  const [mvp, setMvp] = React.useState(cur.mvp || "");
-
+  const max = state.setup.pointsToWin || 12;
   function setScore(side, delta) {
     update(s => {
       const m = window.SuecaEngine.getMatch(s, cur.id);
@@ -334,11 +332,9 @@ function AdminLive({ state, update }) {
   }
 
   function declareWinner(winnerId) {
-    update(s => { window.SuecaEngine.finishMatch(s, cur.id, winnerId, mvp || null); });
+    update(s => { window.SuecaEngine.finishMatch(s, cur.id, winnerId); });
     window.dispatchEvent(new CustomEvent("sueca:jumpView", { detail: { key: "now" } }));
   }
-
-  const players = [A?.p1, A?.p2, B?.p1, B?.p2].filter(Boolean);
 
   return (
     <div className="admin-live">
@@ -358,12 +354,6 @@ function AdminLive({ state, update }) {
           </div>
         ))}
       </div>
-      <label>MVP deste jogo <span className="hint">(opcional)</span>
-        <select value={mvp} onChange={e=>setMvp(e.target.value)}>
-          <option value="">—</option>
-          {players.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-      </label>
     </div>
   );
 }
@@ -476,10 +466,19 @@ function SponsorsEditor({ sponsors, setSponsors }) {
             <button className="mini danger" onClick={()=>remove(i)}>✕</button>
           </div>
         ))}
-        {sponsors.length === 0 && <div className="empty">Sem patrocinadores.</div>}
+        {sponsors.length === 0 && (
+          <div className="empty sponsors-empty">
+            <span className="sponsors-empty-icon">+</span>
+            <span className="sponsors-empty-text">Sem patrocinadores.</span>
+          </div>
+        )}
       </div>
       <label className="file-btn">
-        Adicionar logo
+        <span className="file-btn-plus">+</span>
+        <span className="file-btn-copy">
+          <strong>Adicionar logo</strong>
+          <small>{sponsors.length}/{MAX} logos</small>
+        </span>
         <input type="file" accept="image/*" multiple onChange={handleFile}
                disabled={sponsors.length >= MAX} />
       </label>

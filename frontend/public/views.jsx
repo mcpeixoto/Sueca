@@ -1,6 +1,6 @@
 // ============================================================
 // PROJECTOR VIEWS
-// Rotating screens: NowPlaying → Bracket/League → Ranking → MVP → Upcoming
+// Rotating screens: NowPlaying → Bracket/League → Ranking → Upcoming
 // ============================================================
 
 // ---- Clock ----
@@ -62,7 +62,7 @@ function roundLabel(state, m) {
 
 function ViewNowPlaying({ state }) {
   const live = window.SuecaEngine.liveMatches(state);
-  const max = state.setup.pointsToWin || 10;
+  const max = state.setup.pointsToWin || 12;
 
   if (live.length >= 2) {
     const cols = live.length <= 2 ? 2 : live.length <= 4 ? 2 : 3;
@@ -139,6 +139,7 @@ function MatchCard({ state, match, max, roundName }) {
 function TeamBlock({ team, score, max, side }) {
   if (!team) return <div className="team-block empty">TBD</div>;
   const pct = Math.min(1, score / max);
+  const pipCount = Math.min(max, 12);
   return (
     <div className={`team-block side-${side}`}>
       <div className="tb-name">{team.name}</div>
@@ -154,7 +155,7 @@ function TeamBlock({ team, score, max, side }) {
       <div className="tb-bar">
         <div className="tb-bar-fill" style={{width: `${pct*100}%`}}/>
         <div className="tb-bar-pips">
-          {Array.from({length: max}).map((_, i) => (
+          {Array.from({length: pipCount}).map((_, i) => (
             <div key={i} className={`pip ${i < score ? "on" : ""}`} />
           ))}
         </div>
@@ -236,35 +237,6 @@ function ViewRanking({ state }) {
   );
 }
 
-// ---- View: MVP Leaderboard ----
-function ViewMVP({ state }) {
-  const rows = window.SuecaEngine.mvpLeaderboard(state);
-  return (
-    <div className="view mvp-view">
-      {rows.length === 0 ? (
-        <div className="empty-big">
-          <Card suit={SUITS[0]} rank="?" size={160}/>
-          <p>Ainda sem MVPs nomeados.<br/>Nomeia um no final de cada jogo.</p>
-        </div>
-      ) : (
-        <div className="mvp-grid">
-          {rows.slice(0, 8).map((r, i) => (
-            <div key={r.name} className={`mvp-card rank-${i+1}`}
-                 style={{animationDelay: `${i*0.1}s`}}>
-              <div className="mvp-badge">
-                <span className="suit">{SUITS[i%4].s}</span>
-                <span className="rank">{i===0?"1º":i===1?"2º":i===2?"3º":`${i+1}º`}</span>
-              </div>
-              <div className="mvp-name">{r.name}</div>
-              <div className="mvp-count"><b>{r.count}</b> <span>{r.count===1?"MVP":"MVPs"}</span></div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---- View: Upcoming & History ----
 function ViewUpcomingHistory({ state }) {
   const upcoming = state.matches.filter(m => m.status === "pending" || m.status === "locked").slice(0, 5);
@@ -306,7 +278,6 @@ function ViewUpcomingHistory({ state }) {
                   <span className="score">{h.scoreA} – {h.scoreB}</span>
                   <span className={h.winnerName === h.teamBName ? "winner":""}>{h.teamBName}</span>
                 </div>
-                {h.mvp && <div className="hist-mvp">MVP · {h.mvp}</div>}
               </div>
             ))}
           </div>
@@ -406,5 +377,5 @@ function ViewSponsors({ state }) {
 
 Object.assign(window, {
   ProjectorFrame,
-  ViewNowPlaying, ViewBracket, ViewRanking, ViewMVP, ViewUpcomingHistory, ViewQR, ViewSponsors, FinaleView,
+  ViewNowPlaying, ViewBracket, ViewRanking, ViewUpcomingHistory, ViewQR, ViewSponsors, FinaleView,
 });

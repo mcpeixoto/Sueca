@@ -14,7 +14,7 @@ const DEFAULT_STATE = {
     edition: "Edição 2026",
     format: "knockout", // knockout | league | groups
     teamCount: 8,
-    pointsToWin: 10, // pedras para ganhar um jogo
+    pointsToWin: 12, // maximo de pontos para fechar um jogo
     pointsPerWin: 3, // pontos de torneio por vitória
     tiebreaker: "pedras", // pedras | pedrasDiff | headToHead
     slideSeconds: 24, // duração de cada vista no projector
@@ -23,13 +23,12 @@ const DEFAULT_STATE = {
     sponsors: [],   // [{name, logo}]
   },
   teams: [],        // [{id, name, p1, p2, wins, losses, pedras, pedrasAgainst, points}]
-  matches: [],      // [{id, round, bracketSlot, teamA, teamB, scoreA, scoreB, status, winner, startedAt, finishedAt, mvp}]
+  matches: [],      // [{id, round, bracketSlot, teamA, teamB, scoreA, scoreB, status, winner, startedAt, finishedAt}]
   history: [],      // finished matches, most recent first
   rounds: [],       // [{name, matchIds}]
   format: null,     // the format being run, for safety
   currentMatchId: null,
   createdAt: null,
-  mvpVotes: {},     // {playerName: count}
 };
 
 // -------- Storage --------
@@ -180,7 +179,6 @@ function buildKnockout(state) {
       status: (a && b) ? "pending" : "bye",
       winner: (!a && b) ? b.id : (a && !b ? a.id : null),
       startedAt: null, finishedAt: null,
-      mvp: null,
     };
     matches.push(m);
     r1.push(m.id);
@@ -201,7 +199,6 @@ function buildKnockout(state) {
         status: "locked",
         winner: null,
         startedAt: null, finishedAt: null,
-        mvp: null,
         feedFromA: prev[i],
         feedFromB: prev[i+1],
       };
@@ -260,7 +257,7 @@ function buildLeague(state) {
           teamA: a.id, teamB: b.id,
           scoreA: 0, scoreB: 0,
           status: "pending", winner: null,
-          startedAt: null, finishedAt: null, mvp: null,
+          startedAt: null, finishedAt: null,
         };
         matches.push(m);
         ids.push(m.id);
@@ -294,7 +291,7 @@ function buildGroups(state) {
           teamA: g[i].id, teamB: g[j].id,
           scoreA: 0, scoreB: 0,
           status: "pending", winner: null,
-          startedAt: null, finishedAt: null, mvp: null,
+          startedAt: null, finishedAt: null,
         };
         matches.push(m);
         ids.push(m.id);
@@ -337,13 +334,12 @@ function setMatchScore(state, matchId, scoreA, scoreB) {
   m.status = "live";
 }
 
-function finishMatch(state, matchId, winnerId, mvp) {
+function finishMatch(state, matchId, winnerId) {
   const m = getMatch(state, matchId);
   if (!m) return;
   m.winner = winnerId;
   m.status = "done";
   m.finishedAt = Date.now();
-  if (mvp) m.mvp = mvp;
 
   const a = getTeam(state, m.teamA);
   const b = getTeam(state, m.teamB);
@@ -371,9 +367,6 @@ function finishMatch(state, matchId, winnerId, mvp) {
     if (loser) loser.eliminated = true;
   }
 
-  // MVP votes
-  if (mvp) state.mvpVotes[mvp] = (state.mvpVotes[mvp] || 0) + 1;
-
   // history
   state.history.unshift({
     id: m.id,
@@ -382,7 +375,6 @@ function finishMatch(state, matchId, winnerId, mvp) {
     teamAName: a?.name, teamBName: b?.name,
     scoreA: m.scoreA, scoreB: m.scoreB,
     winnerName: winnerId === a?.id ? a?.name : b?.name,
-    mvp: m.mvp,
   });
 
   // handle any BYE downstream auto-advances (knockout)
@@ -447,12 +439,6 @@ function groupStandings(state, groupIdx) {
   });
 }
 
-function mvpLeaderboard(state) {
-  return Object.entries(state.mvpVotes)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-}
-
 function nextMatches(state, limit = 3) {
   return state.matches.filter(m => m.status === "pending" || m.status === "live").slice(0, limit);
 }
@@ -475,7 +461,7 @@ Object.assign(window, {
     makeTeam, startTournament,
     getMatch, getTeam,
     setMatchScore, finishMatch,
-    standings, groupStandings, mvpLeaderboard,
+    standings, groupStandings,
     nextMatches, currentMatch, liveMatches,
     roundName, uid,
     loadRemoteState, pushRemoteState, getPublicBase, newTournamentId,
