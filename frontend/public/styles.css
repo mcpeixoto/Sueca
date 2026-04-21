@@ -106,7 +106,6 @@ button.danger:hover { background: var(--red-bright); }
 .ph-right { text-align: right; font-family: var(--font-mono); }
 .ph-clock { font-size: 26px; font-weight: 600; color: var(--gold-bright); line-height: 1; letter-spacing: -0.02em; }
 .ph-date { font-size: 12px; color: var(--ink-dim); margin-top: 4px; letter-spacing: 0.08em; }
-.ph-elapsed { font-size: 10px; color: var(--ink-dim); margin-top: 3px; letter-spacing: 0.12em; }
 
 /* Centered slide name (EM JOGO, BRACKET, etc.) — primary "you are here" cue */
 .slide-label {
@@ -293,7 +292,6 @@ button.danger:hover { background: var(--red-bright); }
 
 /* ============== SPONSORS ============== */
 .sponsors-view { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 32px; padding: 40px; }
-.sp-eyebrow { font-family: var(--font-display); font-size: 22px; letter-spacing: 0.3em; color: var(--gold); text-transform: uppercase; }
 .sp-grid { display: grid; gap: 32px; width: 100%; max-width: 1400px; }
 .sp-card { background: rgba(245,230,200,0.05); border: 1px solid rgba(245,230,200,0.15); border-radius: 10px; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 180px; animation: spIn 0.6s cubic-bezier(0.2,0.8,0.2,1) both; }
 @keyframes spIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -427,7 +425,7 @@ button.danger:hover { background: var(--red-bright); }
   .ph-title { font-size: 20px; }
   .ph-clock { font-size: 22px; }
   .ph-eyebrow { font-size: 9px; }
-  .ph-elapsed, .ph-date, .ph-edition { font-size: 10px; }
+  .ph-date, .ph-edition { font-size: 10px; }
 
   .slide-label { font-size: 22px; letter-spacing: 0.18em; margin: 4px 0 16px; }
   .slide-label::before, .slide-label::after { margin: 0 10px; font-size: 16px; }

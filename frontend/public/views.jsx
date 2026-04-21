@@ -21,10 +21,8 @@ function fmtDate(d){
 }
 
 // ---- Projector Frame (header/footer, kept across views) ----
-function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel, elapsedMs }) {
+function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel }) {
   const now = useClock();
-  const elapsedH = Math.floor(elapsedMs / 3600000);
-  const elapsedM = Math.floor((elapsedMs % 3600000) / 60000);
   return (
     <div className="proj-frame">
       <header className="proj-header">
@@ -36,7 +34,6 @@ function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel, elapse
         <div className="ph-right">
           <div className="ph-clock">{fmtTime(now)}</div>
           <div className="ph-date">{fmtDate(now)}</div>
-          <div className="ph-elapsed">Duração · {elapsedH}h {String(elapsedM).padStart(2,"0")}m</div>
         </div>
       </header>
       <div className="pf-views pf-views-top">
@@ -362,7 +359,6 @@ function ViewSponsors({ state }) {
   const cols = sponsors.length <= 2 ? sponsors.length : sponsors.length <= 4 ? 2 : sponsors.length <= 9 ? 3 : 4;
   return (
     <div className="view sponsors-view">
-      <div className="sp-eyebrow">♦ PATROCINADORES ♦</div>
       <div className="sp-grid" style={{gridTemplateColumns: `repeat(${cols}, 1fr)`}}>
         {sponsors.map((s, i) => (
           <div key={i} className="sp-card" style={{animationDelay: `${i*0.08}s`}}>

@@ -154,8 +154,6 @@ function App({ initialState }) {
   }, [views.length]);
 
   const hasStarted = state.matches.length > 0;
-  const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
-
   if (!hasStarted) {
     return (
       <>
@@ -170,7 +168,7 @@ function App({ initialState }) {
   return (
     <>
       <AmbientCards count={5} />
-      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label}>
         {currentView && currentView.render()}
       </ProjectorFrame>
       <CardBurst trigger={burstTrigger} />
@@ -270,12 +268,10 @@ function SpectatorApp({ tournamentId }) {
   }
 
   const currentView = views[viewIdx] || views[0];
-  const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
-
   return (
     <>
       <AmbientCards count={5} />
-      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label}>
         {currentView && currentView.render()}
       </ProjectorFrame>
       <div className="spectator-badge">VISTA DO ESPECTADOR</div>
