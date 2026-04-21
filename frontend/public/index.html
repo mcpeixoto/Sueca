@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="/styles.css?v=8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -17,20 +17,24 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-<script src="vendor/qrcode.min.js"></script>
-<script src="tournament.js?v=6"></script>
-<script type="text/babel" src="cards.jsx?v=6"></script>
-<script type="text/babel" src="setup-admin.jsx?v=6"></script>
-<script type="text/babel" src="views.jsx?v=6"></script>
+<script src="/vendor/qrcode.min.js"></script>
+<script src="/tournament.js?v=8"></script>
+<script type="text/babel" src="/cards.jsx?v=8"></script>
+<script type="text/babel" src="/setup-admin.jsx?v=8"></script>
+<script type="text/babel" src="/views.jsx?v=8"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
 // ---- View rotation config ----
-const ROTATION_DURATION = 12000; // ms per view
+const DEFAULT_ROTATION = 24000; // ms per view (overridable via state.setup.slideSeconds)
+function rotationMs(state) {
+  const s = state?.setup?.slideSeconds;
+  return (s && s > 0) ? s * 1000 : DEFAULT_ROTATION;
+}
 
-function App() {
-  const [state, setState] = useState(() => window.SuecaEngine.loadState());
+function App({ initialState }) {
+  const [state, setState] = useState(() => initialState || window.SuecaEngine.loadState());
   const [viewIdx, setViewIdx] = useState(0);
   const [adminOpen, setAdminOpen] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -57,6 +61,17 @@ function App() {
       setBurstTrigger(b => b + 1);
     }
   }, [state.history]);
+
+  // Admin can request a view jump (e.g. after declaring a winner)
+  useEffect(() => {
+    function onJump(ev) {
+      const key = ev.detail?.key;
+      const idx = views.findIndex(v => v.key === key);
+      if (idx >= 0) setViewIdx(idx);
+    }
+    window.addEventListener("sueca:jumpView", onJump);
+    return () => window.removeEventListener("sueca:jumpView", onJump);
+  }, [views]);
 
   // View rotation
   const hasActiveMatches = state.matches.some(m => m.status === "pending" || m.status === "live");
@@ -95,7 +110,7 @@ function App() {
         setViewIdx(i => (i + 1) % views.length);
         setTimeout(() => setDealing(false), 400);
       }, 400);
-    }, ROTATION_DURATION);
+    }, rotationMs(state));
     return () => clearInterval(t);
   }, [paused, views.length]);
 
@@ -210,7 +225,7 @@ function SpectatorApp({ tournamentId }) {
 
   useEffect(() => {
     if (views.length <= 1) return;
-    const t = setInterval(() => setViewIdx(i => (i + 1) % views.length), ROTATION_DURATION);
+    const t = setInterval(() => setViewIdx(i => (i + 1) % views.length), rotationMs(state));
     return () => clearInterval(t);
   }, [views.length]);
 
@@ -241,11 +256,29 @@ function SpectatorApp({ tournamentId }) {
 }
 
 // ---- Router: path decides admin vs spectator ----
+const _root = ReactDOM.createRoot(document.getElementById("root"));
 const _viewMatch = window.location.pathname.match(/^\/view\/([^/]+)\/?$/);
+const _adminMatch = window.location.pathname.match(/^\/t\/([^/]+)\/?$/);
 if (_viewMatch) {
-  ReactDOM.createRoot(document.getElementById("root")).render(<SpectatorApp tournamentId={_viewMatch[1]} />);
+  _root.render(<SpectatorApp tournamentId={_viewMatch[1]} />);
+} else if (_adminMatch) {
+  const id = _adminMatch[1];
+  const local = window.SuecaEngine.loadState();
+  if (local.tournamentId === id) {
+    _root.render(<App initialState={local} />);
+  } else {
+    // Pull from backend then hand to App
+    window.SuecaEngine.loadRemoteState(id).then(
+      remote => _root.render(<App initialState={remote} />),
+      () => {
+        // Unknown tournament: fall back to local state / setup
+        window.history.replaceState(null, "", "/");
+        _root.render(<App />);
+      }
+    );
+  }
 } else {
-  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  _root.render(<App />);
 }
 </script>
 

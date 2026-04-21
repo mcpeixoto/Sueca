@@ -17,6 +17,7 @@ const DEFAULT_STATE = {
     pointsToWin: 10, // pedras para ganhar um jogo
     pointsPerWin: 3, // pontos de torneio por vitória
     tiebreaker: "pedras", // pedras | pedrasDiff | headToHead
+    slideSeconds: 24, // duração de cada vista no projector
     liveScore: true, // marcar vazas/pedras a vivo
     groupsOf: 4, // para format=groups
     sponsors: [],   // [{name, logo}]

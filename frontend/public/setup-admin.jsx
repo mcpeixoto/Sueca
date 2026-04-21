@@ -13,6 +13,7 @@ function SetupScreen({ state, setState, onStart }) {
   const [pointsToWin, setPointsToWin] = React.useState(state.setup.pointsToWin || 10);
   const [pointsPerWin, setPointsPerWin] = React.useState(state.setup.pointsPerWin || 3);
   const [tiebreaker, setTiebreaker] = React.useState(state.setup.tiebreaker || "pedras");
+  const [slideSeconds, setSlideSeconds] = React.useState(state.setup.slideSeconds || 24);
   const [liveScore, setLiveScore] = React.useState(state.setup.liveScore);
   const [sponsors, setSponsors] = React.useState(state.setup.sponsors || []);
 
@@ -41,12 +42,13 @@ function SetupScreen({ state, setState, onStart }) {
     const filled = teams.filter(t => t.name.trim() !== "");
     if (filled.length < 2) { alert("Precisas de pelo menos 2 equipas."); return; }
     const next = window.SuecaEngine.clone(state);
-    next.setup = { name, edition, format, teamCount: filled.length, pointsToWin, pointsPerWin, tiebreaker, liveScore, groupsOf, sponsors };
+    next.setup = { name, edition, format, teamCount: filled.length, pointsToWin, pointsPerWin, tiebreaker, slideSeconds, liveScore, groupsOf, sponsors };
     next.teams = filled.map(t => window.SuecaEngine.makeTeam(t.name, t.p1, t.p2));
     next.matches = []; next.rounds = []; next.history = []; next.mvpVotes = {};
     const started = window.SuecaEngine.startTournament(next);
     setState(started);
     window.SuecaEngine.saveState(started);
+    try { window.history.replaceState(null, "", `/t/${started.tournamentId}`); } catch(e){}
     onStart();
   }
 
@@ -149,6 +151,10 @@ function SetupScreen({ state, setState, onStart }) {
                 <option value="headToHead">Confronto directo</option>
               </select>
             </label>
+            <label>Duração de cada slide (segundos)
+              <input type="number" min="5" max="120" value={slideSeconds}
+                     onChange={e=>setSlideSeconds(Math.max(5, +e.target.value||24))}/>
+            </label>
             <label className="check">
               <input type="checkbox" checked={liveScore}
                      onChange={e=>setLiveScore(e.target.checked)} />
@@ -203,10 +209,12 @@ function AdminPanel({ state, setState, open, setOpen }) {
   const [tab, setTab] = React.useState("live");
 
   function update(mutator) {
-    const next = window.SuecaEngine.clone(state);
-    mutator(next);
-    setState(next);
-    window.SuecaEngine.saveState(next);
+    setState(prev => {
+      const next = window.SuecaEngine.clone(prev);
+      mutator(next);
+      window.SuecaEngine.saveState(next);
+      return next;
+    });
   }
 
   function exportData() {
@@ -264,6 +272,24 @@ function AdminPanel({ state, setState, open, setOpen }) {
           )}
           {tab === "data" && (
             <div className="admin-data">
+              {state.tournamentId && (
+                <div className="tournament-url">
+                  <div className="tu-label">URL para espectadores</div>
+                  <div className="tu-row">
+                    <input readOnly value={`${window.SuecaEngine.getPublicBase()}/view/${state.tournamentId}`} onFocus={e=>e.target.select()} />
+                    <button className="ghost" onClick={()=>{
+                      const url = `${window.SuecaEngine.getPublicBase()}/view/${state.tournamentId}`;
+                      navigator.clipboard?.writeText(url).then(()=>{}, ()=>{});
+                    }}>Copiar</button>
+                    <a className="ghost" href={`/view/${state.tournamentId}`} target="_blank" rel="noopener">Abrir</a>
+                  </div>
+                </div>
+              )}
+              <label>Duração de cada slide (segundos)
+                <input type="number" min="5" max="120"
+                       value={state.setup.slideSeconds || 24}
+                       onChange={e=>update(s=>{ s.setup.slideSeconds = Math.max(5, +e.target.value||24); })}/>
+              </label>
               <button className="primary" onClick={exportData}>Exportar backup (.json)</button>
               <label className="file-btn">
                 Importar backup
@@ -308,8 +334,8 @@ function AdminLive({ state, update }) {
   }
 
   function declareWinner(winnerId) {
-    if (!confirm(`Terminar jogo? ${winnerId === A.id ? A.name : B.name} ganha.`)) return;
     update(s => { window.SuecaEngine.finishMatch(s, cur.id, winnerId, mvp || null); });
+    window.dispatchEvent(new CustomEvent("sueca:jumpView", { detail: { key: "now" } }));
   }
 
   const players = [A?.p1, A?.p2, B?.p1, B?.p2].filter(Boolean);

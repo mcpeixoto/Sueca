@@ -292,14 +292,23 @@ button.danger:hover { background: var(--red-bright); }
 .finale-stats span { font-size: 12px; letter-spacing: 0.25em; color: var(--ink-dim); text-transform: uppercase; }
 
 /* ============== QR ============== */
-.qr-view { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
-.qr-box { background: var(--ink); color: var(--bg); padding: 40px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 20px; animation: qrIn 0.6s cubic-bezier(0.2,0.8,0.2,1); }
+.qr-view { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 24px; }
+.qr-card { background: linear-gradient(160deg, #f5e6c8 0%, #ecd9ad 100%); color: var(--bg-2); padding: 36px 44px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; gap: 14px; border: 2px solid var(--gold); box-shadow: 0 30px 90px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.5); animation: qrIn 0.6s cubic-bezier(0.2,0.8,0.2,1); position: relative; }
 @keyframes qrIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-.qr-box img { width: 360px; height: 360px; }
-.qr-svg { width: 360px; height: 360px; background: var(--bg); padding: 10px; border-radius: 6px; display: flex; }
+.qr-card-eyebrow { font-size: 11px; letter-spacing: 0.35em; color: var(--gold); font-weight: 700; }
+.qr-card-title { font-family: var(--font-serif); font-size: 30px; font-weight: 700; letter-spacing: -0.01em; text-align: center; line-height: 1.1; }
+.qr-card-sub { font-size: 12px; color: rgba(11,61,46,0.65); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 8px; }
+.qr-box { position: relative; background: #fff; padding: 18px; border-radius: 10px; box-shadow: inset 0 0 0 2px rgba(11,61,46,0.08); }
+.qr-box img { width: 340px; height: 340px; }
+.qr-svg { width: 340px; height: 340px; display: flex; }
 .qr-svg svg { width: 100%; height: 100%; shape-rendering: crispEdges; }
-.qr-url { font-family: var(--font-mono); font-size: 14px; font-weight: 600; word-break: break-all; text-align: center; max-width: 360px; }
-.qr-hint { font-size: 14px; color: #666; letter-spacing: 0.05em; }
+.qr-corner { position: absolute; font-size: 22px; color: var(--gold); opacity: 0.9; }
+.qr-corner-tl { top: 6px; left: 10px; }
+.qr-corner-tr { top: 6px; right: 10px; }
+.qr-corner-bl { bottom: 6px; left: 10px; }
+.qr-corner-br { bottom: 6px; right: 10px; }
+.qr-card-hint { margin-top: 10px; font-size: 13px; color: rgba(11,61,46,0.7); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.qr-card-url { font-family: var(--font-mono); font-size: 11px; color: rgba(11,61,46,0.5); word-break: break-all; text-align: center; max-width: 360px; }
 
 /* ============== SPONSORS ============== */
 .sponsors-view { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 32px; padding: 40px; }
@@ -319,6 +328,13 @@ button.danger:hover { background: var(--red-bright); }
 .sponsor-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .sponsor-row input { flex: 1; }
 .sponsors-editor .hint { font-size: 11px; color: rgba(245,230,200,0.5); }
+
+/* Admin: tournament URL block */
+.tournament-url { display: flex; flex-direction: column; gap: 8px; padding: 14px; background: rgba(212,168,83,0.08); border: 1px solid rgba(212,168,83,0.3); border-radius: 6px; }
+.tu-label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+.tu-row { display: flex; gap: 8px; }
+.tu-row input { flex: 1; font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; }
+.tu-row button { padding: 8px 14px; }
 
 /* ============== ADMIN ============== */
 .admin-toggle { position: fixed; bottom: 20px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background: var(--gold); color: var(--bg-2); font-size: 22px; z-index: 50; box-shadow: var(--shadow); transition: transform 0.2s; }
@@ -498,8 +514,9 @@ button.danger:hover { background: var(--red-bright); }
   .finale-deck { width: 100%; height: 150px; }
 
   /* QR — shrink */
-  .qr-box { padding: 20px; }
-  .qr-box img { width: 240px; height: 240px; }
+  .qr-card { padding: 20px; }
+  .qr-box { padding: 10px; }
+  .qr-box img, .qr-svg { width: 240px; height: 240px; }
 
   /* Admin panel — full width */
   .admin-panel { width: 100vw; }

@@ -366,10 +366,19 @@ function ViewQR({ state }) {
   const svg = React.useMemo(() => buildQrSvg(url), [url]);
   return (
     <div className="view qr-view">
-      <div className="qr-box">
-        <div className="qr-svg" dangerouslySetInnerHTML={{ __html: svg }} />
-        <div className="qr-url">{url}</div>
-        <div className="qr-hint">Aponta a câmara do telemóvel</div>
+      <div className="qr-card">
+        <div className="qr-card-eyebrow">♠ ACOMPANHA EM DIRECTO ♠</div>
+        <div className="qr-card-title">{state.setup.name}</div>
+        <div className="qr-card-sub">{state.setup.edition}</div>
+        <div className="qr-box">
+          <div className="qr-corner qr-corner-tl">♣</div>
+          <div className="qr-corner qr-corner-tr">♦</div>
+          <div className="qr-corner qr-corner-bl">♥</div>
+          <div className="qr-corner qr-corner-br">♠</div>
+          <div className="qr-svg" dangerouslySetInnerHTML={{ __html: svg }} />
+        </div>
+        <div className="qr-card-hint">Aponta a câmara do telemóvel</div>
+        <div className="qr-card-url">{url}</div>
       </div>
     </div>
   );
