@@ -1,1 +1,1 @@
-window.__SUECA_CONFIG__ = { apiUrl: "${API_URL}" };
+window.__SUECA_CONFIG__ = { apiUrl: "${API_URL}", publicUrl: "${PUBLIC_URL}" };

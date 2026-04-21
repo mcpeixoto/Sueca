@@ -39,14 +39,14 @@ function ProjectorFrame({ state, children, viewIdx, viewCount, viewLabel, elapse
           <div className="ph-elapsed">Duração · {elapsedH}h {String(elapsedM).padStart(2,"0")}m</div>
         </div>
       </header>
+      <div className="pf-views pf-views-top">
+        {Array.from({length: viewCount}).map((_, i) => (
+          <div key={i} className={`pf-dot ${i===viewIdx?"on":""}`} />
+        ))}
+      </div>
       {viewLabel && <div key={viewLabel} className="slide-label">{viewLabel}</div>}
       <div className="proj-main">{children}</div>
       <footer className="proj-footer">
-        <div className="pf-views">
-          {Array.from({length: viewCount}).map((_, i) => (
-            <div key={i} className={`pf-dot ${i===viewIdx?"on":""}`} />
-          ))}
-        </div>
         <div className="pf-motto">♦ <em>O trunfo decide.</em> ♦</div>
       </footer>
     </div>
@@ -93,7 +93,7 @@ function ViewNowPlaying({ state }) {
             <Card suit={SUITS[1]} rank="7" size={70} style={{position:"absolute", left:"50%", top:"50%", transform:"translate(-40%, -40%) rotate(6deg)"}}/>
           </div>
           <div className="np-vs-label">vs.</div>
-          <div className="np-pedras">até {max} pedras</div>
+          <div className="np-pedras">até {max} pontos</div>
         </div>
         <TeamBlock team={B} score={m.scoreB} max={max} side="right" />
       </div>
@@ -129,7 +129,7 @@ function MatchCard({ state, match, max, roundName }) {
       </div>
       <div className="mc-bars">
         <div className="mc-bar"><div className="mc-bar-fill" style={{width:`${pctA*100}%`}}/></div>
-        <div className="mc-pedras">até {max} pedras</div>
+        <div className="mc-pedras">até {max} pontos</div>
         <div className="mc-bar"><div className="mc-bar-fill mc-bar-right" style={{width:`${pctB*100}%`}}/></div>
       </div>
     </div>
@@ -149,7 +149,7 @@ function TeamBlock({ team, score, max, side }) {
       </div>
       <div className="tb-score-wrap">
         <div className="tb-score" key={score}>{score}</div>
-        <div className="tb-pedras">pedras</div>
+        <div className="tb-pedras">pontos</div>
       </div>
       <div className="tb-bar">
         <div className="tb-bar-fill" style={{width: `${pct*100}%`}}/>
@@ -162,7 +162,7 @@ function TeamBlock({ team, score, max, side }) {
       <div className="tb-stats">
         <span><b>{team.wins}</b> V</span>
         <span><b>{team.losses}</b> D</span>
-        <span><b>{team.pedras}</b> pedras totais</span>
+        <span><b>{team.pedras}</b> pontos totais</span>
       </div>
     </div>
   );
@@ -213,7 +213,7 @@ function ViewRanking({ state }) {
     <div className="view ranking">
       <div className="rank-table">
         <div className="rank-head">
-          <span>#</span><span>Equipa</span><span>V</span><span>D</span><span>Pedras</span><span>Pts</span>
+          <span>#</span><span>Equipa</span><span>V</span><span>D</span><span>Pontos</span><span>Total</span>
         </div>
         {rows.map((t, i) => (
           <div key={t.id} className={`rank-row pos-${i+1} ${t.eliminated?"elim":""}`}
@@ -335,7 +335,7 @@ function FinaleView({ state }) {
       <div className="finale-players">{champ.p1} · {champ.p2}</div>
       <div className="finale-stats">
         <div><b>{champ.wins}</b><span>vitórias</span></div>
-        <div><b>{champ.pedras}</b><span>pedras</span></div>
+        <div><b>{champ.pedras}</b><span>pontos</span></div>
         <div><b>{champ.points}</b><span>pontos</span></div>
       </div>
     </div>
@@ -343,14 +343,31 @@ function FinaleView({ state }) {
 }
 
 // ---- View: QR for spectators ----
+function buildQrSvg(url) {
+  if (typeof qrcode !== "function") return "";
+  for (let t = 4; t < 41; t++) {
+    try {
+      const qr = qrcode(t, "M");
+      qr.addData(url);
+      qr.make();
+      return qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+    } catch (e) {
+      if (t === 40) return "";
+    }
+  }
+  return "";
+}
+
 function ViewQR({ state }) {
-  const url = state.setup.qrUrl;
-  if (!url) return null;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=${encodeURIComponent(url)}&color=0b3d2e&bgcolor=f5e6c8`;
+  const tid = state.tournamentId;
+  if (!tid) return null;
+  const base = window.SuecaEngine.getPublicBase();
+  const url = `${base}/view/${tid}`;
+  const svg = React.useMemo(() => buildQrSvg(url), [url]);
   return (
     <div className="view qr-view">
       <div className="qr-box">
-        <img src={qrSrc} alt="QR" />
+        <div className="qr-svg" dangerouslySetInnerHTML={{ __html: svg }} />
         <div className="qr-url">{url}</div>
         <div className="qr-hint">Aponta a câmara do telemóvel</div>
       </div>
@@ -358,7 +375,27 @@ function ViewQR({ state }) {
   );
 }
 
+// ---- View: Sponsors ----
+function ViewSponsors({ state }) {
+  const sponsors = (state.setup && state.setup.sponsors) || [];
+  if (!sponsors.length) return null;
+  const cols = sponsors.length <= 2 ? sponsors.length : sponsors.length <= 4 ? 2 : sponsors.length <= 9 ? 3 : 4;
+  return (
+    <div className="view sponsors-view">
+      <div className="sp-eyebrow">♦ PATROCINADORES ♦</div>
+      <div className="sp-grid" style={{gridTemplateColumns: `repeat(${cols}, 1fr)`}}>
+        {sponsors.map((s, i) => (
+          <div key={i} className="sp-card" style={{animationDelay: `${i*0.08}s`}}>
+            {s.logo ? <img src={s.logo} alt={s.name || ""} /> : <div className="sp-name-big">{s.name}</div>}
+            {s.logo && s.name && <div className="sp-name">{s.name}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   ProjectorFrame,
-  ViewNowPlaying, ViewBracket, ViewRanking, ViewMVP, ViewUpcomingHistory, ViewQR, FinaleView,
+  ViewNowPlaying, ViewBracket, ViewRanking, ViewMVP, ViewUpcomingHistory, ViewQR, ViewSponsors, FinaleView,
 });

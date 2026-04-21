@@ -11,8 +11,10 @@ function SetupScreen({ state, setState, onStart }) {
   const [teamCount, setTeamCount] = React.useState(state.setup.teamCount || 8);
   const [groupsOf, setGroupsOf] = React.useState(state.setup.groupsOf || 4);
   const [pointsToWin, setPointsToWin] = React.useState(state.setup.pointsToWin || 10);
+  const [pointsPerWin, setPointsPerWin] = React.useState(state.setup.pointsPerWin || 3);
+  const [tiebreaker, setTiebreaker] = React.useState(state.setup.tiebreaker || "pedras");
   const [liveScore, setLiveScore] = React.useState(state.setup.liveScore);
-  const [qrUrl, setQrUrl] = React.useState(state.setup.qrUrl || "");
+  const [sponsors, setSponsors] = React.useState(state.setup.sponsors || []);
 
   const [teams, setTeams] = React.useState(() => {
     const n = state.setup.teamCount || 8;
@@ -39,7 +41,7 @@ function SetupScreen({ state, setState, onStart }) {
     const filled = teams.filter(t => t.name.trim() !== "");
     if (filled.length < 2) { alert("Precisas de pelo menos 2 equipas."); return; }
     const next = window.SuecaEngine.clone(state);
-    next.setup = { name, edition, format, teamCount: filled.length, pointsToWin, liveScore, groupsOf, qrUrl };
+    next.setup = { name, edition, format, teamCount: filled.length, pointsToWin, pointsPerWin, tiebreaker, liveScore, groupsOf, sponsors };
     next.teams = filled.map(t => window.SuecaEngine.makeTeam(t.name, t.p1, t.p2));
     next.matches = []; next.rounds = []; next.history = []; next.mvpVotes = {};
     const started = window.SuecaEngine.startTournament(next);
@@ -125,9 +127,13 @@ function SetupScreen({ state, setState, onStart }) {
                 <input type="number" min="2" max="32" value={teamCount}
                        onChange={e=>setTeamCount(Math.max(2, +e.target.value||2))}/>
               </label>
-              <label>Pedras para ganhar jogo
+              <label>Pontos para ganhar jogo
                 <input type="number" min="1" max="20" value={pointsToWin}
                        onChange={e=>setPointsToWin(+e.target.value||10)}/>
+              </label>
+              <label>Pontos por vitória
+                <input type="number" min="1" max="10" value={pointsPerWin}
+                       onChange={e=>setPointsPerWin(+e.target.value||3)}/>
               </label>
               {format === "groups" && (
                 <label>Equipas / grupo
@@ -136,14 +142,23 @@ function SetupScreen({ state, setState, onStart }) {
                 </label>
               )}
             </div>
+            <label>Desempate
+              <select value={tiebreaker} onChange={e=>setTiebreaker(e.target.value)}>
+                <option value="pedras">Pontos totais</option>
+                <option value="pedrasDiff">Diferença de pontos</option>
+                <option value="headToHead">Confronto directo</option>
+              </select>
+            </label>
             <label className="check">
               <input type="checkbox" checked={liveScore}
                      onChange={e=>setLiveScore(e.target.checked)} />
               Marcar pontos/vazas ao vivo durante o jogo
             </label>
-            <label>URL / QR para espectadores <span className="hint">(opcional)</span>
-              <input value={qrUrl} onChange={e=>setQrUrl(e.target.value)} placeholder="https://..." />
-            </label>
+          </section>
+
+          <section>
+            <h3>Patrocinadores <span className="hint">(opcional)</span></h3>
+            <SponsorsEditor sponsors={sponsors} setSponsors={setSponsors} />
           </section>
 
           <section>
@@ -232,7 +247,7 @@ function AdminPanel({ state, setState, open, setOpen }) {
           <button className="ghost" onClick={()=>setOpen(false)}>Fechar ✕</button>
         </div>
         <div className="admin-tabs">
-          {[["live","Jogo atual"],["matches","Jogos"],["teams","Equipas"],["data","Dados"]].map(([k,l]) => (
+          {[["live","Jogo atual"],["matches","Jogos"],["teams","Equipas"],["sponsors","Patrocinadores"],["data","Dados"]].map(([k,l]) => (
             <button key={k} className={tab===k?"on":""} onClick={()=>setTab(k)}>{l}</button>
           ))}
         </div>
@@ -241,6 +256,12 @@ function AdminPanel({ state, setState, open, setOpen }) {
           {tab === "live" && <AdminLive state={state} update={update} />}
           {tab === "matches" && <AdminMatches state={state} update={update} />}
           {tab === "teams" && <AdminTeams state={state} update={update} />}
+          {tab === "sponsors" && (
+            <SponsorsEditor
+              sponsors={state.setup.sponsors || []}
+              setSponsors={v => update(s => { s.setup.sponsors = typeof v === "function" ? v(s.setup.sponsors || []) : v; })}
+            />
+          )}
           {tab === "data" && (
             <div className="admin-data">
               <button className="primary" onClick={exportData}>Exportar backup (.json)</button>
@@ -377,7 +398,7 @@ function AdminTeams({ state, update }) {
           <input value={t.p2} placeholder="Jogador 2"
             onChange={e=>update(s=>{ s.teams[i].p2 = e.target.value; })} />
           <div className="mini-stats">
-            <span>{t.wins}V</span><span>{t.losses}D</span><span>{t.pedras}p</span>
+            <span>{t.wins}V</span><span>{t.losses}D</span><span>{t.pedras} pts</span>
           </div>
         </div>
       ))}
@@ -385,7 +406,63 @@ function AdminTeams({ state, update }) {
   );
 }
 
+// ---------------- Sponsors Editor ----------------
+function SponsorsEditor({ sponsors, setSponsors }) {
+  const MAX = 10;
+  const MAX_BYTES = 200 * 1024;
+
+  function handleFile(ev) {
+    const files = Array.from(ev.target.files || []);
+    ev.target.value = "";
+    files.forEach(f => {
+      if (f.size > MAX_BYTES) {
+        if (!confirm(`${f.name} tem ${Math.round(f.size/1024)} KB. Logos grandes atrasam o projetor. Continuar?`)) return;
+      }
+      const r = new FileReader();
+      r.onload = () => {
+        setSponsors(prev => {
+          if (prev.length >= MAX) { alert(`Máximo ${MAX} patrocinadores.`); return prev; }
+          return [...prev, { name: f.name.replace(/\.[^.]+$/, ""), logo: r.result }];
+        });
+      };
+      r.readAsDataURL(f);
+    });
+  }
+
+  function remove(i) {
+    setSponsors(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  function rename(i, name) {
+    setSponsors(prev => prev.map((s, idx) => idx === i ? { ...s, name } : s));
+  }
+
+  return (
+    <div className="sponsors-editor">
+      <div className="sponsors-list">
+        {sponsors.map((s, i) => (
+          <div key={i} className="sponsor-row">
+            <div className="sponsor-thumb">
+              {s.logo ? <img src={s.logo} alt=""/> : <span>—</span>}
+            </div>
+            <input value={s.name || ""} placeholder="Nome"
+                   onChange={e=>rename(i, e.target.value)} />
+            <button className="mini danger" onClick={()=>remove(i)}>✕</button>
+          </div>
+        ))}
+        {sponsors.length === 0 && <div className="empty">Sem patrocinadores.</div>}
+      </div>
+      <label className="file-btn">
+        Adicionar logo
+        <input type="file" accept="image/*" multiple onChange={handleFile}
+               disabled={sponsors.length >= MAX} />
+      </label>
+      <div className="hint">Até {MAX} logos, idealmente PNG/SVG com fundo transparente.</div>
+    </div>
+  );
+}
+
 // Helper used by admin
 window.nextPow2 = function(n){ let p = 1; while (p < n) p *= 2; return p; };
 
-Object.assign(window, { SetupScreen, AdminPanel });
+Object.assign(window, { SetupScreen, AdminPanel, SponsorsEditor });

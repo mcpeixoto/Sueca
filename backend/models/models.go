@@ -8,20 +8,21 @@ import (
 )
 
 type Tournament struct {
-	ID          string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Name        string    `json:"name"`
-	Edition     string    `json:"edition"`
-	Format      string    `json:"format"`
-	TeamCount   int       `json:"teamCount"`
-	PointsToWin int       `json:"pointsToWin"`
-	LiveScore   bool      `json:"liveScore"`
-	GroupsOf    int       `json:"groupsOf"`
-	QrURL       string    `json:"qrUrl"`
-	State       string    `gorm:"type:text" json:"state"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	Teams       []Team    `gorm:"foreignKey:TournamentID;constraint:OnDelete:CASCADE" json:"teams"`
-	Matches     []Match   `gorm:"foreignKey:TournamentID;constraint:OnDelete:CASCADE" json:"matches"`
+	ID           string    `gorm:"primaryKey;type:uuid" json:"id"`
+	Name         string    `json:"name"`
+	Edition      string    `json:"edition"`
+	Format       string    `json:"format"`
+	TeamCount    int       `json:"teamCount"`
+	PointsToWin  int       `json:"pointsToWin"`
+	PointsPerWin int       `json:"pointsPerWin"`
+	Tiebreaker   string    `json:"tiebreaker"`
+	LiveScore    bool      `json:"liveScore"`
+	GroupsOf     int       `json:"groupsOf"`
+	State        string    `gorm:"type:text" json:"state"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+	Teams        []Team    `gorm:"foreignKey:TournamentID;constraint:OnDelete:CASCADE" json:"teams"`
+	Matches      []Match   `gorm:"foreignKey:TournamentID;constraint:OnDelete:CASCADE" json:"matches"`
 }
 
 func (t *Tournament) BeforeCreate(tx *gorm.DB) error {

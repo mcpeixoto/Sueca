@@ -8,17 +8,20 @@ const STORAGE_KEY = "sueca_tournament_v1";
 
 // -------- Defaults --------
 const DEFAULT_STATE = {
+  tournamentId: null,
   setup: {
     name: "Torneio de Sueca · S. Cibrão",
     edition: "Edição 2026",
     format: "knockout", // knockout | league | groups
     teamCount: 8,
     pointsToWin: 10, // pedras para ganhar um jogo
+    pointsPerWin: 3, // pontos de torneio por vitória
+    tiebreaker: "pedras", // pedras | pedrasDiff | headToHead
     liveScore: true, // marcar vazas/pedras a vivo
     groupsOf: 4, // para format=groups
-    qrUrl: "",
+    sponsors: [],   // [{name, logo}]
   },
-  teams: [],        // [{id, name, p1, p2, wins, losses, pedras, points}]
+  teams: [],        // [{id, name, p1, p2, wins, losses, pedras, pedrasAgainst, points}]
   matches: [],      // [{id, round, bracketSlot, teamA, teamB, scoreA, scoreB, status, winner, startedAt, finishedAt, mvp}]
   history: [],      // finished matches, most recent first
   rounds: [],       // [{name, matchIds}]
@@ -34,7 +37,9 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return clone(DEFAULT_STATE);
     const parsed = JSON.parse(raw);
-    return { ...clone(DEFAULT_STATE), ...parsed };
+    const merged = { ...clone(DEFAULT_STATE), ...parsed };
+    merged.setup = { ...clone(DEFAULT_STATE.setup), ...(parsed.setup || {}) };
+    return merged;
   } catch (e) {
     console.warn("loadState failed", e);
     return clone(DEFAULT_STATE);
@@ -42,12 +47,85 @@ function loadState() {
 }
 function saveState(state) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+  scheduleRemoteSync(state);
 }
 function resetState() {
   localStorage.removeItem(STORAGE_KEY);
   return clone(DEFAULT_STATE);
 }
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// -------- Backend sync (debounced PUT; POST on 404) --------
+function getApiBase() {
+  return (window.__SUECA_CONFIG__ && window.__SUECA_CONFIG__.apiUrl) || "";
+}
+function getPublicBase() {
+  const cfg = window.__SUECA_CONFIG__ && window.__SUECA_CONFIG__.publicUrl;
+  if (cfg && cfg !== "${PUBLIC_URL}") return cfg.replace(/\/$/, "");
+  return window.location.origin;
+}
+let _syncTimer = null;
+let _syncing = false;
+function scheduleRemoteSync(state) {
+  if (!state.tournamentId || !state.matches.length) return;
+  if (_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(() => pushRemoteState(state), 300);
+}
+async function pushRemoteState(state) {
+  if (_syncing) { scheduleRemoteSync(state); return; }
+  _syncing = true;
+  const payload = {
+    id: state.tournamentId,
+    name: state.setup.name,
+    edition: state.setup.edition,
+    format: state.setup.format,
+    teamCount: state.teams.length,
+    pointsToWin: state.setup.pointsToWin,
+    pointsPerWin: state.setup.pointsPerWin,
+    tiebreaker: state.setup.tiebreaker,
+    liveScore: state.setup.liveScore,
+    groupsOf: state.setup.groupsOf,
+    state: JSON.stringify(state),
+  };
+  const base = getApiBase();
+  try {
+    const put = await fetch(`${base}/api/tournaments/${state.tournamentId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (put.status === 404) {
+      await fetch(`${base}/api/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+  } catch (e) {
+    // offline is fine — localStorage keeps working
+  } finally {
+    _syncing = false;
+  }
+}
+async function loadRemoteState(id) {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/tournaments/${id}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const t = await res.json();
+  if (!t.state) throw new Error("empty state");
+  const parsed = JSON.parse(t.state);
+  const merged = { ...clone(DEFAULT_STATE), ...parsed };
+  merged.setup = { ...clone(DEFAULT_STATE.setup), ...(parsed.setup || {}) };
+  return merged;
+}
+function newTournamentId() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  // RFC4122 fallback
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
 
 // -------- ID --------
 let _uid = 1;
@@ -63,6 +141,7 @@ function makeTeam(name = "", p1 = "", p2 = "") {
     p1, p2,
     wins: 0, losses: 0,
     pedras: 0, // total pedras won
+    pedrasAgainst: 0, // total pedras conceded
     points: 0, // tournament points
     eliminated: false,
   };
@@ -237,6 +316,7 @@ function startTournament(state) {
   state.groups = built.groups || null;
   state.format = state.setup.format;
   state.createdAt = Date.now();
+  if (!state.tournamentId) state.tournamentId = newTournamentId();
   // set first match
   const first = state.matches.find(m => m.status === "pending");
   state.currentMatchId = first ? first.id : null;
@@ -266,11 +346,14 @@ function finishMatch(state, matchId, winnerId, mvp) {
 
   const a = getTeam(state, m.teamA);
   const b = getTeam(state, m.teamB);
+  const ppw = state.setup.pointsPerWin || 3;
   if (a && b) {
-    if (winnerId === a.id) { a.wins++; b.losses++; a.points += 3; }
-    else { b.wins++; a.losses++; b.points += 3; }
+    if (winnerId === a.id) { a.wins++; b.losses++; a.points += ppw; }
+    else { b.wins++; a.losses++; b.points += ppw; }
     a.pedras += m.scoreA;
     b.pedras += m.scoreB;
+    a.pedrasAgainst = (a.pedrasAgainst || 0) + m.scoreB;
+    b.pedrasAgainst = (b.pedrasAgainst || 0) + m.scoreA;
   }
   // knockout: advance winner
   if (state.format === "knockout") {
@@ -323,11 +406,33 @@ function finishMatch(state, matchId, winnerId, mvp) {
 }
 
 // -------- Standings --------
+function pedrasDiff(t) { return (t.pedras || 0) - (t.pedrasAgainst || 0); }
+function headToHeadWinner(state, a, b) {
+  // return +1 if a ranks higher, -1 if b higher, 0 if inconclusive
+  const matches = state.history.filter(h =>
+    (h.teamAName === a.name && h.teamBName === b.name) ||
+    (h.teamAName === b.name && h.teamBName === a.name));
+  if (!matches.length) return 0;
+  let aWins = 0, bWins = 0;
+  matches.forEach(h => { if (h.winnerName === a.name) aWins++; else if (h.winnerName === b.name) bWins++; });
+  if (aWins === bWins) return 0;
+  return aWins > bWins ? 1 : -1;
+}
+function tiebreakCompare(state, a, b) {
+  const mode = (state.setup && state.setup.tiebreaker) || "pedras";
+  if (mode === "pedrasDiff") return pedrasDiff(b) - pedrasDiff(a);
+  if (mode === "headToHead") {
+    const h2h = headToHeadWinner(state, a, b);
+    if (h2h !== 0) return -h2h; // a higher => a before b => negative
+    return pedrasDiff(b) - pedrasDiff(a);
+  }
+  return (b.pedras || 0) - (a.pedras || 0);
+}
 function standings(state) {
   return [...state.teams].sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (b.wins !== a.wins) return b.wins - a.wins;
-    return b.pedras - a.pedras;
+    return tiebreakCompare(state, a, b);
   });
 }
 
@@ -337,7 +442,7 @@ function groupStandings(state, groupIdx) {
   return ids.map(id => getTeam(state, id)).filter(Boolean).sort((a,b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (b.wins !== a.wins) return b.wins - a.wins;
-    return b.pedras - a.pedras;
+    return tiebreakCompare(state, a, b);
   });
 }
 
@@ -372,5 +477,6 @@ Object.assign(window, {
     standings, groupStandings, mvpLeaderboard,
     nextMatches, currentMatch, liveMatches,
     roundName, uid,
+    loadRemoteState, pushRemoteState, getPublicBase, newTournamentId,
   }
 });

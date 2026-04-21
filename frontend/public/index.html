@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=6">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -17,10 +17,11 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-<script src="tournament.js"></script>
-<script type="text/babel" src="cards.jsx"></script>
-<script type="text/babel" src="setup-admin.jsx"></script>
-<script type="text/babel" src="views.jsx"></script>
+<script src="vendor/qrcode.min.js"></script>
+<script src="tournament.js?v=6"></script>
+<script type="text/babel" src="cards.jsx?v=6"></script>
+<script type="text/babel" src="setup-admin.jsx?v=6"></script>
+<script type="text/babel" src="views.jsx?v=6"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
@@ -77,8 +78,11 @@ function App() {
     if (Object.keys(state.mvpVotes).length > 0) {
       list.push({ key: "mvp", label: "MVPs", render: () => <ViewMVP state={state}/> });
     }
-    if (state.setup.qrUrl) {
+    if (state.tournamentId) {
       list.push({ key: "qr", label: "QR", render: () => <ViewQR state={state}/> });
+    }
+    if (state.setup.sponsors && state.setup.sponsors.length > 0) {
+      list.push({ key: "sponsors", label: "Patrocinadores", render: () => <ViewSponsors state={state}/> });
     }
     return list;
   }, [state, allDone]);
@@ -153,7 +157,96 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+// ---- Spectator (read-only) ----
+function SpectatorApp({ tournamentId }) {
+  const [state, setState] = useState(null);
+  const [err, setErr] = useState(null);
+  const [viewIdx, setViewIdx] = useState(0);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const s = await window.SuecaEngine.loadRemoteState(tournamentId);
+        if (!cancelled) { setState(s); setErr(null); }
+      } catch (e) {
+        if (!cancelled) setErr(e.message || String(e));
+      }
+    }
+    poll();
+    const t = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [tournamentId]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const views = React.useMemo(() => {
+    if (!state) return [];
+    const list = [];
+    const hasActive = state.matches.some(m => m.status === "pending" || m.status === "live");
+    const allDone = state.matches.length > 0 && !hasActive;
+    if (allDone) {
+      list.push({ key: "finale", label: "Campeões", render: () => <FinaleView state={state}/> });
+    } else {
+      list.push({ key: "now", label: "Em Jogo", render: () => <ViewNowPlaying state={state}/> });
+    }
+    if (state.format === "knockout" || state.format === "groups") {
+      list.push({ key: "bracket", label: state.format==="groups"?"Grupos":"Bracket", render: () => <ViewBracket state={state}/> });
+    }
+    list.push({ key: "rank", label: "Ranking", render: () => <ViewRanking state={state}/> });
+    list.push({ key: "upc", label: "Próx/Hist", render: () => <ViewUpcomingHistory state={state}/> });
+    if (Object.keys(state.mvpVotes || {}).length > 0) {
+      list.push({ key: "mvp", label: "MVPs", render: () => <ViewMVP state={state}/> });
+    }
+    if (state.setup.sponsors && state.setup.sponsors.length > 0) {
+      list.push({ key: "sponsors", label: "Patrocinadores", render: () => <ViewSponsors state={state}/> });
+    }
+    return list;
+  }, [state]);
+
+  useEffect(() => {
+    if (views.length <= 1) return;
+    const t = setInterval(() => setViewIdx(i => (i + 1) % views.length), ROTATION_DURATION);
+    return () => clearInterval(t);
+  }, [views.length]);
+
+  useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
+
+  if (!state) {
+    return (
+      <div className="spectator-loading">
+        <div className="empty-big">
+          {err ? <><p>Não foi possível ligar ao torneio.</p><small style={{opacity:0.6}}>{err}</small></> : <p>A carregar torneio…</p>}
+        </div>
+      </div>
+    );
+  }
+
+  const currentView = views[viewIdx] || views[0];
+  const elapsedMs = state.createdAt ? (nowTick - state.createdAt) : 0;
+
+  return (
+    <>
+      <AmbientCards count={5} />
+      <ProjectorFrame state={state} viewIdx={viewIdx} viewCount={views.length} viewLabel={currentView?.label} elapsedMs={elapsedMs}>
+        {currentView && currentView.render()}
+      </ProjectorFrame>
+      <div className="spectator-badge">VISTA DO ESPECTADOR</div>
+    </>
+  );
+}
+
+// ---- Router: path decides admin vs spectator ----
+const _viewMatch = window.location.pathname.match(/^\/view\/([^/]+)\/?$/);
+if (_viewMatch) {
+  ReactDOM.createRoot(document.getElementById("root")).render(<SpectatorApp tournamentId={_viewMatch[1]} />);
+} else {
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+}
 </script>
 
 <style>
@@ -172,6 +265,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 }
 .kbd-hints span { display: flex; gap: 6px; }
 .kbd-hints em { font-style: normal; color: rgba(245,230,200,0.6); letter-spacing: 0.05em; }
+.spectator-badge {
+  position: fixed; top: 20px; right: 20px;
+  background: rgba(212,168,83,0.85); color: #082a20;
+  padding: 6px 14px; border-radius: 14px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.2em; z-index: 45;
+}
+.spectator-loading {
+  display: flex; align-items: center; justify-content: center;
+  width: 100vw; height: 100vh;
+}
 </style>
 </body>
 </html>

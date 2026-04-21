@@ -40,6 +40,7 @@ services:
     environment:
       - API_URL=${BACKEND_URL}
       - BACKEND_HOST=${BACKEND_HOST:-backend}
+      - PUBLIC_URL=${FRONTEND_URL}
     networks:
       - webnet
 
