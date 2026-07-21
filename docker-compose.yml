@@ -2,7 +2,7 @@ services:
   backend:
     container_name: ${CONTAINER_PREFIX}_backend
     build: ./backend
-    restart: always
+    restart: unless-stopped
     # SEGURANÇA: Não publicar o backend diretamente.
     # Deve ser exposto apenas via reverse-proxy (80/81/443).
     # env_file is loaded via docker compose --env-file flag
@@ -31,7 +31,7 @@ services:
     container_name: ${CONTAINER_PREFIX}_frontend
     build:
       context: ./frontend
-    restart: always
+    restart: unless-stopped
     # SEGURANÇA: Não publicar o frontend diretamente.
     # Deve ser exposto apenas via reverse-proxy (80/81/443).
     # Ports exposed for direct access (optional - NPM routes via webnet)
@@ -47,7 +47,7 @@ services:
   db:
     container_name: ${CONTAINER_PREFIX}_db
     image: postgres:15-alpine
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
