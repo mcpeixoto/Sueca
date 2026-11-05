@@ -9,6 +9,7 @@ const STORAGE_KEY = "sueca_tournament_v1";
 // -------- Defaults --------
 const DEFAULT_STATE = {
   tournamentId: null,
+  remote: { viewKey: null, paused: false, seq: 0 },
   setup: {
     name: "Torneio de Sueca · S. Cibrão",
     edition: "Edição 2026",
@@ -39,12 +40,21 @@ function loadState() {
     const parsed = JSON.parse(raw);
     const merged = { ...clone(DEFAULT_STATE), ...parsed };
     merged.setup = { ...clone(DEFAULT_STATE.setup), ...(parsed.setup || {}) };
+    merged.remote = { ...clone(DEFAULT_STATE.remote), ...(parsed.remote || {}) };
     return merged;
   } catch (e) {
     console.warn("loadState failed", e);
     return clone(DEFAULT_STATE);
   }
 }
+
+function bumpRemote(state, patch) {
+  const prev = state.remote || { viewKey: null, paused: false, seq: 0 };
+  state.remote = { ...prev, ...patch, seq: (prev.seq || 0) + 1 };
+}
+function remoteSetView(state, viewKey) { bumpRemote(state, { viewKey }); }
+function remoteSetPaused(state, paused) { bumpRemote(state, { paused }); }
+function remoteNudge(state) { bumpRemote(state, {}); }
 function saveState(state) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   scheduleRemoteSync(state);
@@ -66,12 +76,20 @@ function getPublicBase() {
 }
 let _syncTimer = null;
 let _syncing = false;
+let _lastSyncedState = null;
 function scheduleRemoteSync(state) {
   if (!state.tournamentId || !state.matches.length) return;
+  _lastSyncedState = state;
   if (_syncTimer) clearTimeout(_syncTimer);
   _syncTimer = setTimeout(() => pushRemoteState(state), 300);
 }
-async function pushRemoteState(state) {
+function flushRemoteSync(state) {
+  const s = state || _lastSyncedState;
+  if (!s || !s.tournamentId || !s.matches.length) return;
+  if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
+  pushRemoteState(s);
+}
+async function pushRemoteState(state, attempt = 0) {
   if (_syncing) { scheduleRemoteSync(state); return; }
   _syncing = true;
   const payload = {
@@ -88,35 +106,83 @@ async function pushRemoteState(state) {
     state: JSON.stringify(state),
   };
   const base = getApiBase();
+  let ok = false;
   try {
     const put = await fetch(`${base}/api/tournaments/${state.tournamentId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (put.status === 404) {
-      await fetch(`${base}/api/tournaments`, {
+    if (put.ok) ok = true;
+    else if (put.status === 404) {
+      const post = await fetch(`${base}/api/tournaments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      ok = post.ok;
     }
   } catch (e) {
-    // offline is fine — localStorage keeps working
+    ok = false;
   } finally {
     _syncing = false;
   }
+  if (!ok && attempt < 2) {
+    setTimeout(() => pushRemoteState(state, attempt + 1), 400 * (attempt + 1));
+  }
+}
+function parseRemote(t) {
+  if (!t.state) throw new Error("empty state");
+  const parsed = JSON.parse(t.state);
+  const merged = { ...clone(DEFAULT_STATE), ...parsed };
+  merged.setup = { ...clone(DEFAULT_STATE.setup), ...(parsed.setup || {}) };
+  merged.remote = { ...clone(DEFAULT_STATE.remote), ...(parsed.remote || {}) };
+  merged.tournamentId = t.id || merged.tournamentId;
+  merged.code = t.code;
+  merged.adminCode = t.adminCode;
+  return merged;
 }
 async function loadRemoteState(id) {
   const base = getApiBase();
   const res = await fetch(`${base}/api/tournaments/${id}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return parseRemote(await res.json());
+}
+async function loadByTournamentCode(code) {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/tournaments/by-code/${encodeURIComponent(code)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return parseRemote(await res.json());
+}
+async function loadByAdminCode(code) {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/tournaments/by-admin/${encodeURIComponent(code)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return parseRemote(await res.json());
+}
+async function createRemote(state) {
+  const base = getApiBase();
+  const payload = {
+    id: state.tournamentId,
+    name: state.setup.name,
+    edition: state.setup.edition,
+    format: state.setup.format,
+    teamCount: state.teams.length,
+    pointsToWin: state.setup.pointsToWin,
+    pointsPerWin: state.setup.pointsPerWin,
+    tiebreaker: state.setup.tiebreaker,
+    liveScore: state.setup.liveScore,
+    groupsOf: state.setup.groupsOf,
+    state: JSON.stringify(state),
+  };
+  const res = await fetch(`${base}/api/tournaments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const t = await res.json();
-  if (!t.state) throw new Error("empty state");
-  const parsed = JSON.parse(t.state);
-  const merged = { ...clone(DEFAULT_STATE), ...parsed };
-  merged.setup = { ...clone(DEFAULT_STATE.setup), ...(parsed.setup || {}) };
-  return merged;
+  return { id: t.id, code: t.code, adminCode: t.adminCode };
 }
 function newTournamentId() {
   if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -479,6 +545,8 @@ Object.assign(window, {
     standings, groupStandings,
     nextMatches, currentMatch, liveMatches, activeStageMatches,
     roundName, uid,
-    loadRemoteState, pushRemoteState, getPublicBase, newTournamentId,
+    loadRemoteState, loadByTournamentCode, loadByAdminCode, createRemote,
+    pushRemoteState, flushRemoteSync, getPublicBase, newTournamentId,
+    remoteSetView, remoteSetPaused, remoteNudge,
   }
 });

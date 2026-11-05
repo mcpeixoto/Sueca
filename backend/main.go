@@ -4,16 +4,55 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 
 	"sueca-backend/database"
 	"sueca-backend/handlers"
 	"sueca-backend/models"
 )
+
+const defaultRetentionDays = 365
+
+func startCleanupLoop(db *gorm.DB) {
+	days := defaultRetentionDays
+	if raw := os.Getenv("TOURNAMENT_RETENTION_DAYS"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			days = n
+		}
+	}
+	if days <= 0 {
+		log.Printf("[cleanup] disabled (TOURNAMENT_RETENTION_DAYS=%d)", days)
+		return
+	}
+	log.Printf("[cleanup] retention enabled: %d days", days)
+	go func() {
+		runCleanup(db, days)
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			runCleanup(db, days)
+		}
+	}()
+}
+
+func runCleanup(db *gorm.DB, days int) {
+	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	res := db.Where("updated_at < ?", cutoff).Delete(&models.Tournament{})
+	if res.Error != nil {
+		log.Printf("[cleanup] error: %v", res.Error)
+		return
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("[cleanup] removed %d tournaments older than %d days", res.RowsAffected, days)
+	}
+}
 
 func main() {
 	_ = godotenv.Load()
@@ -50,11 +89,15 @@ func main() {
 		{
 			tg.GET("", th.List)
 			tg.POST("", th.Create)
+			tg.GET("/by-code/:code", th.GetByCode)
+			tg.GET("/by-admin/:code", th.GetByAdminCode)
 			tg.GET("/:id", th.Get)
 			tg.PUT("/:id", th.Update)
 			tg.DELETE("/:id", th.Delete)
 		}
 	}
+
+	startCleanupLoop(db)
 
 	port := os.Getenv("PORT")
 	if port == "" {

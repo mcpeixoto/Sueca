@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -36,6 +37,26 @@ func (h *TournamentHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, t)
 }
 
+func (h *TournamentHandler) GetByCode(c *gin.Context) {
+	code := strings.ToUpper(c.Param("code"))
+	var t models.Tournament
+	if err := h.db.Preload("Teams").Preload("Matches").First(&t, "code = ?", code).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, t)
+}
+
+func (h *TournamentHandler) GetByAdminCode(c *gin.Context) {
+	code := strings.ToUpper(c.Param("code"))
+	var t models.Tournament
+	if err := h.db.Preload("Teams").Preload("Matches").First(&t, "admin_code = ?", code).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, t)
+}
+
 func (h *TournamentHandler) Create(c *gin.Context) {
 	var t models.Tournament
 	if err := c.ShouldBindJSON(&t); err != nil {
@@ -63,6 +84,8 @@ func (h *TournamentHandler) Update(c *gin.Context) {
 	}
 	patch.ID = existing.ID
 	patch.CreatedAt = existing.CreatedAt
+	patch.Code = existing.Code
+	patch.AdminCode = existing.AdminCode
 	if err := h.db.Save(&patch).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

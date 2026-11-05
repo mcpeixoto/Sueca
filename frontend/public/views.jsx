@@ -206,6 +206,65 @@ function ViewBracket({ state }) {
   );
 }
 
+// ---- View: Schedule (league — one round at a time) ----
+function activeRoundIndex(state) {
+  const rounds = state.rounds || [];
+  for (let i = 0; i < rounds.length; i++) {
+    const hasNonDone = rounds[i].matchIds.some(mid => {
+      const m = window.SuecaEngine.getMatch(state, mid);
+      return m && m.status !== "done";
+    });
+    if (hasNonDone) return i;
+  }
+  return Math.max(0, rounds.length - 1);
+}
+
+function ViewSchedule({ state }) {
+  const rounds = state.rounds || [];
+  if (!rounds.length) return <div className="view"><div className="empty-big"><p>Sem jornadas.</p></div></div>;
+  const idx = activeRoundIndex(state);
+  const round = rounds[idx];
+  const matches = round.matchIds.map(mid => window.SuecaEngine.getMatch(state, mid)).filter(Boolean);
+  const doneCount = matches.filter(m => m.status === "done").length;
+  const liveCount = matches.filter(m => m.status === "live").length;
+  return (
+    <div className="view schedule-view">
+      <div className="sched-head">
+        <div className="sched-eyebrow">Liga · Jornadas</div>
+        <h2 className="sched-title">{round.name}</h2>
+        <div className="sched-sub">
+          Jornada {idx + 1} de {rounds.length} · {doneCount}/{matches.length} concluídos
+          {liveCount > 0 && <span className="sched-live-badge"> · {liveCount} ao vivo</span>}
+        </div>
+      </div>
+      <div className="sched-grid" style={{gridTemplateColumns: `repeat(${matches.length <= 4 ? matches.length : matches.length <= 8 ? 2 : 3}, 1fr)`}}>
+        {matches.map((m, i) => {
+          const A = window.SuecaEngine.getTeam(state, m.teamA);
+          const B = window.SuecaEngine.getTeam(state, m.teamB);
+          const winA = m.winner && m.winner === m.teamA;
+          const winB = m.winner && m.winner === m.teamB;
+          const showScore = m.status !== "pending";
+          return (
+            <div key={m.id} className={`sched-match status-${m.status}`} style={{animationDelay: `${i*0.05}s`}}>
+              <div className={`sched-row ${winA?"win":""} ${m.winner && !winA?"lose":""}`}>
+                <span className="sched-name">{A?.name || <em>—</em>}</span>
+                <span className="sched-score">{showScore ? m.scoreA : ""}</span>
+              </div>
+              <div className={`sched-row ${winB?"win":""} ${m.winner && !winB?"lose":""}`}>
+                <span className="sched-name">{B?.name || <em>—</em>}</span>
+                <span className="sched-score">{showScore ? m.scoreB : ""}</span>
+              </div>
+              {m.status === "live" && <div className="sched-badge live">● AO VIVO</div>}
+              {m.status === "done" && <div className="sched-badge done">✓</div>}
+              {m.status === "pending" && <div className="sched-badge pending">Por jogar</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---- View: Ranking (all teams sorted) ----
 function ViewRanking({ state }) {
   const rows = window.SuecaEngine.standings(state);
@@ -327,10 +386,9 @@ function buildQrSvg(url) {
 }
 
 function ViewQR({ state }) {
-  const tid = state.tournamentId;
-  if (!tid) return null;
+  if (!state.code) return null;
   const base = window.SuecaEngine.getPublicBase();
-  const url = `${base}/view/${tid}`;
+  const url = `${base}/s/${state.code}`;
   const svg = React.useMemo(() => buildQrSvg(url), [url]);
   return (
     <div className="view qr-view">
@@ -373,5 +431,6 @@ function ViewSponsors({ state }) {
 
 Object.assign(window, {
   ProjectorFrame,
-  ViewNowPlaying, ViewBracket, ViewRanking, ViewUpcomingHistory, ViewQR, ViewSponsors, FinaleView,
+  ViewNowPlaying, ViewBracket, ViewSchedule, ViewRanking, ViewUpcomingHistory, ViewQR, ViewSponsors, FinaleView,
+  buildQrSvg,
 });
