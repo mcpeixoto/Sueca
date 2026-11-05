@@ -1,14 +1,19 @@
 package models
 
 import (
+	"crypto/rand"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
+const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+
 type Tournament struct {
 	ID           string    `gorm:"primaryKey;type:uuid" json:"id"`
+	Code         string    `gorm:"uniqueIndex;size:4" json:"code"`
+	AdminCode    string    `gorm:"uniqueIndex;size:6" json:"adminCode"`
 	Name         string    `json:"name"`
 	Edition      string    `json:"edition"`
 	Format       string    `json:"format"`
@@ -29,7 +34,50 @@ func (t *Tournament) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.NewString()
 	}
+	if t.Code == "" {
+		code, err := uniqueCode(tx, "code", 4)
+		if err != nil {
+			return err
+		}
+		t.Code = code
+	}
+	if t.AdminCode == "" {
+		code, err := uniqueCode(tx, "admin_code", 6)
+		if err != nil {
+			return err
+		}
+		t.AdminCode = code
+	}
 	return nil
+}
+
+func randomCode(n int) (string, error) {
+	buf := make([]byte, n)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	out := make([]byte, n)
+	for i, b := range buf {
+		out[i] = codeAlphabet[int(b)%len(codeAlphabet)]
+	}
+	return string(out), nil
+}
+
+func uniqueCode(tx *gorm.DB, column string, n int) (string, error) {
+	for i := 0; i < 20; i++ {
+		code, err := randomCode(n)
+		if err != nil {
+			return "", err
+		}
+		var count int64
+		if err := tx.Model(&Tournament{}).Where(column+" = ?", code).Count(&count).Error; err != nil {
+			return "", err
+		}
+		if count == 0 {
+			return code, nil
+		}
+	}
+	return "", gorm.ErrInvalidData
 }
 
 type Team struct {

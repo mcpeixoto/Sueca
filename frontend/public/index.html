@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/styles.css?v=10">
+<link rel="stylesheet" href="/styles.css?v=20">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -18,17 +18,17 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
 <script src="/vendor/qrcode.min.js"></script>
-<script src="/tournament.js?v=10"></script>
-<script type="text/babel" src="/cards.jsx?v=10"></script>
-<script type="text/babel" src="/setup-admin.jsx?v=10"></script>
-<script type="text/babel" src="/views.jsx?v=10"></script>
+<script src="/tournament.js?v=20"></script>
+<script type="text/babel" src="/cards.jsx?v=20"></script>
+<script type="text/babel" src="/setup-admin.jsx?v=20"></script>
+<script type="text/babel" src="/views.jsx?v=20"></script>
 
 <script type="text/babel">
 // Cache-bust version for frontend deploys.
 // Bump this value whenever JS/CSS/HTML changes need to be forced onto clients.
 // Keep the `?v=` asset query params below in sync with this version.
 // After bumping it, redeploy/restart the frontend so clients receive the new version.
-const APP_VERSION = "10";
+const APP_VERSION = "20";
 const APP_VERSION_KEY = "sueca_app_version";
 const RELOAD_GUARD_KEY = "sueca_app_version_reload";
 
@@ -55,71 +55,82 @@ function rotationMs(state) {
   return (s && s > 0) ? s * 1000 : DEFAULT_ROTATION;
 }
 
-function App({ initialState }) {
-  const [state, setState] = useState(() => initialState || window.SuecaEngine.loadState());
+// ---- Projector (big screen, polls by code, obeys admin remote) ----
+function ProjectorApp({ code }) {
+  const [state, setState] = useState(null);
+  const [err, setErr] = useState(null);
   const [viewIdx, setViewIdx] = useState(0);
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [lastWinnerId, setLastWinnerId] = useState(null);
-  const [burstTrigger, setBurstTrigger] = useState(0);
-  const [dealing, setDealing] = useState(false);
+  const [localPaused, setLocalPaused] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [dealing, setDealing] = useState(false);
+  const [burstTrigger, setBurstTrigger] = useState(0);
+  const [lastWinnerId, setLastWinnerId] = useState(null);
+  const lastSeenSeq = useRef(0);
 
-  // Persist on every change
-  useEffect(() => { window.SuecaEngine.saveState(state); }, [state]);
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const s = await window.SuecaEngine.loadByTournamentCode(code);
+        if (!cancelled) { setState(s); setErr(null); }
+      } catch (e) {
+        if (!cancelled) setErr(e.message || String(e));
+      }
+    }
+    poll();
+    const t = setInterval(poll, 1000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [code]);
 
-  // Re-render every second for clock / elapsed
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Detect a new win → fire burst
+  const views = React.useMemo(() => {
+    if (!state) return [];
+    const list = [];
+    const hasActive = state.matches.some(m => m.status === "pending" || m.status === "live");
+    const allDone = state.matches.length > 0 && !hasActive;
+    if (allDone) list.push({ key: "finale", label: "Campeões", render: () => <FinaleView state={state}/> });
+    else list.push({ key: "now", label: "Em Jogo", render: () => <ViewNowPlaying state={state}/> });
+    if (state.format === "knockout" || state.format === "groups") {
+      list.push({ key: "bracket", label: state.format==="groups"?"Grupos":"Bracket", render: () => <ViewBracket state={state}/> });
+    } else if (state.format === "league") {
+      list.push({ key: "schedule", label: "Jornadas", render: () => <ViewSchedule state={state}/> });
+    }
+    list.push({ key: "rank", label: "Ranking", render: () => <ViewRanking state={state}/> });
+    list.push({ key: "upc", label: "Próx/Hist", render: () => <ViewUpcomingHistory state={state}/> });
+    if (state.code) list.push({ key: "qr", label: "QR", render: () => <ViewQR state={state}/> });
+    if (state.setup.sponsors && state.setup.sponsors.length > 0) {
+      list.push({ key: "sponsors", label: "Patrocinadores", render: () => <ViewSponsors state={state}/> });
+    }
+    return list;
+  }, [state]);
+
   useEffect(() => {
-    if (!state.history.length) return;
+    if (!state || !state.remote) return;
+    const seq = state.remote.seq || 0;
+    if (seq > lastSeenSeq.current) {
+      lastSeenSeq.current = seq;
+      if (state.remote.viewKey) {
+        const idx = views.findIndex(v => v.key === state.remote.viewKey);
+        if (idx >= 0) setViewIdx(idx);
+      }
+      setLocalPaused(!!state.remote.paused);
+    }
+  }, [state, views]);
+
+  useEffect(() => {
+    if (!state?.history?.length) return;
     const latest = state.history[0];
     if (latest && latest.id !== lastWinnerId) {
       setLastWinnerId(latest.id);
       setBurstTrigger(b => b + 1);
     }
-  }, [state.history]);
+  }, [state?.history]);
 
-  // Admin can request a view jump (e.g. after declaring a winner)
-  useEffect(() => {
-    function onJump(ev) {
-      const key = ev.detail?.key;
-      const idx = views.findIndex(v => v.key === key);
-      if (idx >= 0) setViewIdx(idx);
-    }
-    window.addEventListener("sueca:jumpView", onJump);
-    return () => window.removeEventListener("sueca:jumpView", onJump);
-  }, [views]);
-
-  // View rotation
-  const hasActiveMatches = state.matches.some(m => m.status === "pending" || m.status === "live");
-  const allDone = state.matches.length > 0 && !hasActiveMatches;
-
-  // Build view list dynamically
-  const views = React.useMemo(() => {
-    const list = [];
-    if (allDone) {
-      list.push({ key: "finale", label: "Campeões", render: () => <FinaleView state={state}/> });
-    } else {
-      list.push({ key: "now", label: "Em Jogo", render: () => <ViewNowPlaying state={state}/> });
-    }
-    if (state.format === "knockout" || state.format === "groups") {
-      list.push({ key: "bracket", label: state.format==="groups"?"Grupos":"Bracket", render: () => <ViewBracket state={state}/> });
-    }
-    list.push({ key: "rank", label: "Ranking", render: () => <ViewRanking state={state}/> });
-    list.push({ key: "upc", label: "Próx/Hist", render: () => <ViewUpcomingHistory state={state}/> });
-    if (state.tournamentId) {
-      list.push({ key: "qr", label: "QR", render: () => <ViewQR state={state}/> });
-    }
-    if (state.setup.sponsors && state.setup.sponsors.length > 0) {
-      list.push({ key: "sponsors", label: "Patrocinadores", render: () => <ViewSponsors state={state}/> });
-    }
-    return list;
-  }, [state, allDone]);
+  const paused = localPaused;
 
   useEffect(() => {
     if (paused || views.length <= 1) return;
@@ -131,19 +142,16 @@ function App({ initialState }) {
       }, 400);
     }, rotationMs(state));
     return () => clearInterval(t);
-  }, [paused, views.length]);
+  }, [paused, views.length, state]);
 
-  // Clamp viewIdx
   useEffect(() => { if (viewIdx >= views.length) setViewIdx(0); }, [views.length]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {
       if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-      if (e.key === " ") { e.preventDefault(); setPaused(p => !p); }
+      if (e.key === " ") { e.preventDefault(); setLocalPaused(p => !p); }
       if (e.key === "ArrowRight") setViewIdx(i => (i + 1) % views.length);
       if (e.key === "ArrowLeft") setViewIdx(i => (i - 1 + views.length) % views.length);
-      if (e.key === "a" || e.key === "A") setAdminOpen(o => !o);
       if (e.key === "f" || e.key === "F") {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen();
@@ -153,18 +161,17 @@ function App({ initialState }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [views.length]);
 
-  const hasStarted = state.matches.length > 0;
-  if (!hasStarted) {
+  if (!state) {
     return (
-      <>
-        <AmbientCards count={8} />
-        <SetupScreen state={state} setState={setState} onStart={() => {}} />
-      </>
+      <div className="spectator-loading">
+        <div className="empty-big">
+          {err ? <><p>Não foi possível ligar ao torneio.</p><small style={{opacity:0.6}}>{err}</small></> : <p>A carregar torneio…</p>}
+        </div>
+      </div>
     );
   }
 
   const currentView = views[viewIdx] || views[0];
-
   return (
     <>
       <AmbientCards count={5} />
@@ -173,24 +180,19 @@ function App({ initialState }) {
       </ProjectorFrame>
       <CardBurst trigger={burstTrigger} />
       <DealingCards playing={dealing} />
-      <AdminPanel state={state} setState={setState} open={adminOpen} setOpen={setAdminOpen} />
-
-      {paused && (
-        <div className="pause-indicator">⏸ Rotação pausada · Espaço para retomar</div>
-      )}
-
+      {paused && <div className="pause-indicator">⏸ Rotação pausada · Espaço para retomar</div>}
       <div className="kbd-hints">
         <span>Espaço <em>pausa</em></span>
         <span>← → <em>mudar vista</em></span>
-        <span>A <em>admin</em></span>
         <span>F <em>ecrã cheio</em></span>
       </div>
+      <MadeByFooter />
     </>
   );
 }
 
-// ---- Spectator (read-only) ----
-function SpectatorApp({ tournamentId }) {
+// ---- Spectator (phone, tabs, read-only) ----
+function SpectatorApp({ code }) {
   const [state, setState] = useState(null);
   const [err, setErr] = useState(null);
   const [viewIdx, setViewIdx] = useState(0);
@@ -207,7 +209,7 @@ function SpectatorApp({ tournamentId }) {
     let cancelled = false;
     async function poll() {
       try {
-        const s = await window.SuecaEngine.loadRemoteState(tournamentId);
+        const s = await window.SuecaEngine.loadByTournamentCode(code);
         if (!cancelled) { setState(s); setErr(null); }
       } catch (e) {
         if (!cancelled) setErr(e.message || String(e));
@@ -216,7 +218,7 @@ function SpectatorApp({ tournamentId }) {
     poll();
     const t = setInterval(poll, 5000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [tournamentId]);
+  }, [code]);
 
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000);
@@ -235,6 +237,8 @@ function SpectatorApp({ tournamentId }) {
     }
     if (state.format === "knockout" || state.format === "groups") {
       list.push({ key: "bracket", label: state.format==="groups"?"Grupos":"Bracket", render: () => <ViewBracket state={state}/> });
+    } else if (state.format === "league") {
+      list.push({ key: "schedule", label: "Jornadas", render: () => <ViewSchedule state={state}/> });
     }
     list.push({ key: "rank", label: "Ranking", render: () => <ViewRanking state={state}/> });
     list.push({ key: "upc", label: "Próx/Hist", render: () => <ViewUpcomingHistory state={state}/> });
@@ -303,34 +307,121 @@ function SpectatorApp({ tournamentId }) {
           </div>
         </div>
       )}
+      <MadeByFooter />
     </>
   );
 }
 
-// ---- Router: path decides admin vs spectator ----
-const _root = ReactDOM.createRoot(document.getElementById("root"));
-const _viewMatch = window.location.pathname.match(/^\/view\/([^/]+)\/?$/);
-const _adminMatch = window.location.pathname.match(/^\/t\/([^/]+)\/?$/);
-if (_viewMatch) {
-  _root.render(<SpectatorApp tournamentId={_viewMatch[1]} />);
-} else if (_adminMatch) {
-  const id = _adminMatch[1];
-  const local = window.SuecaEngine.loadState();
-  if (local.tournamentId === id) {
-    _root.render(<App initialState={local} />);
-  } else {
-    // Pull from backend then hand to App
-    window.SuecaEngine.loadRemoteState(id).then(
-      remote => _root.render(<App initialState={remote} />),
-      () => {
-        // Unknown tournament: fall back to local state / setup
-        window.history.replaceState(null, "", "/");
-        _root.render(<App />);
-      }
+// ---- Landing / code-lookup wrappers ----
+function LandingApp() {
+  const [view, setView] = useState("landing"); // landing | setup | codes
+  const [setupState, setSetupState] = useState(() => {
+    const s = window.SuecaEngine.loadState();
+    s.tournamentId = null;
+    s.matches = []; s.rounds = []; s.history = [];
+    s.code = undefined; s.adminCode = undefined;
+    return s;
+  });
+  const [codes, setCodes] = useState(null);
+
+  if (view === "setup") {
+    return (
+      <>
+        <AmbientCards count={8} />
+        <SetupScreen
+          state={setupState}
+          setState={setSetupState}
+          onCreated={(c) => { setCodes(c); setView("codes"); }}
+        />
+        <MadeByFooter />
+      </>
     );
   }
+  if (view === "codes" && codes) {
+    return (
+      <>
+        <AmbientCards count={5} />
+        <CodesScreen
+          code={codes.code}
+          adminCode={codes.adminCode}
+          tournamentName={codes.tournamentName}
+        />
+        <MadeByFooter />
+      </>
+    );
+  }
+  return (
+    <>
+      <AmbientCards count={8} />
+      <LandingScreen onStart={() => setView("setup")} />
+      <MadeByFooter />
+    </>
+  );
+}
+
+// ---- Admin page: full-screen control panel (no projector views) ----
+function AdminPageApp({ code }) {
+  const [state, setState] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.SuecaEngine.loadByAdminCode(code).then(
+      s => { if (!cancelled) setState(s); },
+      e => { if (!cancelled) setErr(e?.message || "Torneio não encontrado."); }
+    );
+    return () => { cancelled = true; };
+  }, [code]);
+
+  if (err) {
+    return (
+      <div className="spectator-loading">
+        <div className="empty-big">
+          <p>Torneio não encontrado.</p>
+          <small style={{opacity:0.6}}>Código admin: {code}</small>
+          <p style={{marginTop:20}}>
+            <a href="/" className="primary" style={{textDecoration:"none", padding:"10px 18px", borderRadius:8}}>
+              ← Voltar
+            </a>
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (!state) {
+    return (
+      <div className="spectator-loading">
+        <div className="empty-big"><p>A carregar painel…</p></div>
+      </div>
+    );
+  }
+  return <AdminHost initialState={state} />;
+}
+
+function AdminHost({ initialState }) {
+  const [state, setState] = useState(initialState);
+  useEffect(() => { window.SuecaEngine.saveState(state); }, [state]);
+  return (
+    <>
+      <AdminPanel state={state} setState={setState} fullPage={true} open={true} setOpen={()=>{}} />
+      <MadeByFooter />
+    </>
+  );
+}
+
+// ---- Router: landing / projector / spectator / admin ----
+const _root = ReactDOM.createRoot(document.getElementById("root"));
+const _tMatch = window.location.pathname.match(/^\/t\/([A-Za-z]{4})\/?$/);
+const _sMatch = window.location.pathname.match(/^\/s\/([A-Za-z]{4})\/?$/);
+const _aMatch = window.location.pathname.match(/^\/a\/([A-Za-z]{6})\/?$/);
+if (_tMatch) {
+  _root.render(<ProjectorApp code={_tMatch[1].toUpperCase()} />);
+} else if (_sMatch) {
+  _root.render(<SpectatorApp code={_sMatch[1].toUpperCase()} />);
+} else if (_aMatch) {
+  _root.render(<AdminPageApp code={_aMatch[1].toUpperCase()} />);
 } else {
-  _root.render(<App />);
+  _root.render(<LandingApp />);
 }
 </script>
 
